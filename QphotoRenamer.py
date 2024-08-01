@@ -37,7 +37,7 @@ COMMON_DATE_FORMATS = [
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "照片批量重命名 QphotoRenamer 1.0.1 —— QwejayHuang",
+        "window_title": "照片批量重命名 QphotoRenamer 1.0.2 —— QwejayHuang",
         "description": "只需将照片拖入列表即可快速添加；点击“开始”按钮批量重命名您的照片；双击查看文件；右键点击移除文件；单击文件显示EXIF信息。",
         "start_renaming": "开始重命名",
         "undo_renaming": "撤销重命名",
@@ -60,7 +60,7 @@ LANGUAGES = {
         "help_text": "使用说明:\n1. 拖拽文件进列表，或点击“添加文件”按钮选择文件。\n2. 点击“开始重命名”按钮开始重命名文件。\n3. 双击列表中的文件名打开图片。\n4. 右键点击列表中的文件名移除文件。\n5. 点击“撤销重命名”按钮恢复到原始名称。\n6. 点击“设置”按钮更改日期格式。\n7. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n8. 点击“清空列表”按钮清空文件列表。\n9. 点击“停止重命名”按钮停止重命名操作。\n10. 点击文件名显示EXIF信息。"
     },
     "English": {
-        "window_title": "QphotoRenamer 1.0.1 —— QwejayHuang",
+        "window_title": "QphotoRenamer 1.0.2 —— QwejayHuang",
         "description": "Drag and drop photos into the list for quick addition, and then click ‘Start’ to begin renaming the photos.",
         "start_renaming": "Start",
         "undo_renaming": "Undo",
@@ -462,7 +462,7 @@ def show_help():
     help_label.pack(padx=10, pady=10)
 
 root = TkinterDnD.Tk()
-root.title("照片批量重命名 QphotoRenamer 1.0.1 —— QwejayHuang")
+root.title("照片批量重命名 QphotoRenamer 1.0.2 —— QwejayHuang")
 root.geometry("800x600")
 
 # 设置窗口图标
