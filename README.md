@@ -12,7 +12,7 @@ QphotoRenamer 是一个用于批量重命名照片文件的工具，支持多种
 - 支持自动滚动和清空文件列表。
 
 ## 下载
-[查看所有版本]([https://github.com/your-username/your-repo/releases](https://github.com/Qwejay/QphotoRenamer/releases))
+[查看所有版本](https://github.com/Qwejay/QphotoRenamer/releases)
 
 ## 运行&编译
 ### 依赖项
