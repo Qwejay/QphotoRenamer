@@ -14,8 +14,9 @@ import json
 import locale
 import subprocess
 
-# 移除日志配置
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='rename_tool.log')
+# 获取当前脚本所在的目录路径
+base_path = os.path.dirname(os.path.abspath(__file__))
+icon_path = os.path.join(base_path, 'logo.ico')
 
 DATE_FORMAT = "%Y%m%d_%H%M%S"
 stop_requested = False
@@ -465,7 +466,7 @@ root.title("照片批量重命名 QphotoRenamer 1.0.1 —— QwejayHuang")
 root.geometry("800x600")
 
 # 设置窗口图标
-root.iconbitmap(root, "logo.ico")
+root.iconbitmap(icon_path)
 
 style = ttk.Style('litera')  # 使用ttkbootstrap主题
 
