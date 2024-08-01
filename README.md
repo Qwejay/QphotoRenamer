@@ -11,8 +11,10 @@ QphotoRenamer 是一个用于批量重命名照片文件的工具，支持多种
 - 支持设置重命名样式和语言。
 - 支持自动滚动和清空文件列表。
 
-## 安装
+## 下载
+[查看所有版本]([https://github.com/your-username/your-repo/releases](https://github.com/Qwejay/QphotoRenamer/releases))
 
+## 运行&编译
 ### 依赖项
 
 在运行QphotoRenamer之前，请确保已安装以下依赖项：
@@ -28,7 +30,8 @@ QphotoRenamer 是一个用于批量重命名照片文件的工具，支持多种
 
 ```bash
 pip install exifread piexif pillow_heif ttkbootstrap tkinterdnd2
+
+nuitk打包参数：
 pip install nuitka
 
-nuitka打包命令：
-nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-package=tkinterdnd2 --include-data-file=QPhotoRenamer.ini=QPhotoRenamer.ini --include-data-file=logo.ico=logo.ico --windows-icon-from-ico=logo.ico QPhotoRenamer.py
+nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-package=tkinterdnd2 --include-data-file=QphotoRenamer.ini=QphotoRenamer.ini --include-data-file=logo.ico=logo.ico --windows-icon-from-ico=logo.ico QphotoRenamer.py
