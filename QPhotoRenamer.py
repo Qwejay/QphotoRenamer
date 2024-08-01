@@ -14,7 +14,8 @@ import json
 import locale
 import subprocess
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='rename_tool.log')
+# 移除日志配置
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='rename_tool.log')
 
 DATE_FORMAT = "%Y%m%d_%H%M%S"
 stop_requested = False
@@ -50,11 +51,16 @@ LANGUAGES = {
         "use_modification_date": "使用修改日期重命名",
         "language": "语言",
         "save_settings": "保存设置",
-        "formats_explanation": "常用日期格式示例:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023"
+        "formats_explanation": "常用日期格式示例:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023",
+        "renaming_in_progress": "重命名操作已在进行中，请稍后再试。",
+        "renaming_stopped": "重命名操作已停止。",
+        "renaming_success": "成功重命名 {0} 个文件，未重命名 {1} 个文件。",
+        "all_files_restored": "所有文件已恢复到原始名称。",
+        "help_text": "使用说明:\n1. 拖拽文件进列表，或点击“添加文件”按钮选择文件。\n2. 点击“开始重命名”按钮开始重命名文件。\n3. 双击列表中的文件名打开图片。\n4. 右键点击列表中的文件名移除文件。\n5. 点击“撤销重命名”按钮恢复到原始名称。\n6. 点击“设置”按钮更改日期格式。\n7. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n8. 点击“清空列表”按钮清空文件列表。\n9. 点击“停止重命名”按钮停止重命名操作。\n10. 点击文件名显示EXIF信息。"
     },
     "English": {
         "window_title": "QphotoRenamer 1.0.1 —— QwejayHuang",
-        "description": "Just drop photos into the list to quickly add them; click the 'Start' button to rename your photos; double-click to view files; right-click to remove files; click on the file to display EXIF information.",
+        "description": "Drag and drop photos into the list for quick addition, and then click ‘Start’ to begin renaming the photos.",
         "start_renaming": "Start",
         "undo_renaming": "Undo",
         "stop_renaming": "Stop",
@@ -68,7 +74,12 @@ LANGUAGES = {
         "use_modification_date": "Use Modification Date for Renaming",
         "language": "Language",
         "save_settings": "Save Settings",
-        "formats_explanation": "Common Date Formats Examples:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023"
+        "formats_explanation": "Common Date Formats Examples:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023",
+        "renaming_in_progress": "Renaming operation is already in progress, please try again later.",
+        "renaming_stopped": "Renaming operation has been stopped.",
+        "renaming_success": "Successfully renamed {0} files, {1} files not renamed.",
+        "all_files_restored": "All files have been restored to their original names.",
+        "help_text": "Usage Instructions:\n1. Drag files into the list or click the 'Add Files' button to select files.\n2. Click the 'Start' button to begin renaming files.\n3. Double-click on a file name in the list to open the image.\n4. Right-click on a file name in the list to remove the file.\n5. Click the 'Undo' button to restore files to their original names.\n6. Click the 'Settings' button to change the date format.\n7. Check the 'Auto Scroll' option to automatically scroll to the latest added file.\n8. Click the 'Clear List' button to clear the file list.\n9. Click the 'Stop' button to stop the renaming operation.\n10. Click on a file name to display EXIF information."
     }
 }
 
@@ -89,16 +100,16 @@ def set_language(language):
 
 def save_language(language):
     config = {}
-    if os.path.exists("QPhotoRenamer.ini"):
-        with open("QPhotoRenamer.ini", "r") as f:
+    if os.path.exists("QphotoRenamer.ini"):
+        with open("QphotoRenamer.ini", "r") as f:
             config = json.load(f)
     config["language"] = language
-    with open("QPhotoRenamer.ini", "w") as f:
+    with open("QphotoRenamer.ini", "w") as f:
         json.dump(config, f)
 
 def load_language():
-    if os.path.exists("QPhotoRenamer.ini"):
-        with open("QPhotoRenamer.ini", "r") as f:
+    if os.path.exists("QphotoRenamer.ini"):
+        with open("QphotoRenamer.ini", "r") as f:
             config = json.load(f)
             return config.get("language", "简体中文")
     return "简体中文"
@@ -186,7 +197,7 @@ def rename_photos(files_listbox, progress_var):
     global stop_requested, renaming_in_progress, processed_files, unrenamed_files
 
     if renaming_in_progress:
-        update_status_bar("重命名操作已在进行中，请稍后再试。")
+        update_status_bar("renaming_in_progress")
         return
 
     renaming_in_progress = True
@@ -201,12 +212,12 @@ def rename_photos(files_listbox, progress_var):
     for i in range(total_files):
         if stop_requested:
             stop_requested = False
-            update_status_bar("重命名操作已停止。")
+            update_status_bar("renaming_stopped")
             break
 
         file_path = files_listbox.get(i).strip('"')
         if file_path not in processed_files:
-            update_status_bar(f"正在重命名: {os.path.basename(file_path)}")
+            update_status_bar("renaming_in_progress")
             renamed = rename_photo(file_path, files_listbox, progress_var, total_files, i)
             if renamed:
                 processed_files.add(file_path)
@@ -223,7 +234,7 @@ def rename_photos(files_listbox, progress_var):
                 # 如果重命名失败，确保循环能够继续处理下一个文件
                 continue
 
-    update_status_bar(f"成功重命名 {len(processed_files)} 个文件，未重命名 {unrenamed_files} 个文件。")
+    update_status_bar("renaming_success", len(processed_files), unrenamed_files)
 
     undo_button.config(state=ttk.NORMAL)
     renaming_in_progress = False
@@ -235,7 +246,7 @@ def rename_photo(file_path, files_listbox, progress_var, total_files, current_in
     filename = os.path.basename(file_path)
     # 检查文件名是否已经是重命名后的名字
     if re.match(r'\d{8}_\d{6}\.\w+', filename):
-        update_status_bar(f'跳过重命名: "{file_path}" 已是重命名后的名字')
+        update_status_bar("renaming_in_progress")
         progress_var.set((current_index + 1) * 100 / total_files)
         return False
 
@@ -276,7 +287,7 @@ def undo_rename():
         except Exception as e:
             logging.error(f'撤销重命名失败: {new}, 错误: {e}')
     original_to_new_mapping.clear()
-    update_status_bar("所有文件已恢复到原始名称。")
+    update_status_bar("all_files_restored")
     # 撤销操作完成后，禁用撤销按钮
     undo_button.config(state=ttk.DISABLED)
 
@@ -344,16 +355,16 @@ def save_settings(date_format, language, settings_window):
         "use_modification_date": use_modification_date_var.get(),
         "language": language
     }
-    with open("QPhotoRenamer.ini", "w") as f:
+    with open("QphotoRenamer.ini", "w") as f:
         json.dump(config, f)
     set_language(language)
-    update_status_bar("设置已保存")
+    update_status_bar("save_settings")
     settings_window.destroy()  # 关闭设置界面
 
 def load_settings():
     global DATE_FORMAT
-    if os.path.exists("QPhotoRenamer.ini"):
-        with open("QPhotoRenamer.ini", "r") as f:
+    if os.path.exists("QphotoRenamer.ini"):
+        with open("QphotoRenamer.ini", "r") as f:
             config = json.load(f)
             DATE_FORMAT = config.get("date_format", "%Y%m%d_%H%M%S")
             use_modification_date_var.set(config.get("use_modification_date", True))
@@ -434,25 +445,18 @@ def open_file(event):
         # 双击的是空白处，打开添加文件框
         select_files(files_listbox)
 
-def update_status_bar(message):
-    status_bar.config(text=message)
+def update_status_bar(message_key, *args):
+    lang = LANGUAGES[language_var.get()]
+    if message_key in lang:
+        status_bar.config(text=lang[message_key].format(*args))
+    else:
+        status_bar.config(text=message_key)
 
 def show_help():
+    lang = LANGUAGES[language_var.get()]
     help_window = Toplevel(root)
-    help_window.title("帮助")
-    help_text = (
-        "使用说明:\n"
-        "1. 拖拽文件进列表，或点击“添加文件”按钮选择文件。\n"
-        "2. 点击“开始重命名”按钮开始重命名文件。\n"
-        "3. 双击列表中的文件名打开图片。\n"
-        "4. 右键点击列表中的文件名移除文件。\n"
-        "5. 点击“撤销重命名”按钮恢复到原始名称。\n"
-        "6. 点击“设置”按钮更改日期格式。\n"
-        "7. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n"
-        "8. 点击“清空列表”按钮清空文件列表。\n"
-        "9. 点击“停止重命名”按钮停止重命名操作。\n"
-        "10. 点击文件名显示EXIF信息。"
-    )
+    help_window.title(lang["help"])
+    help_text = lang["help_text"]
     help_label = Label(help_window, text=help_text, justify='left')
     help_label.pack(padx=10, pady=10)
 
