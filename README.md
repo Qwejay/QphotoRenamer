@@ -28,8 +28,7 @@ QphotoRenamer 是一个用于批量重命名照片文件的工具，支持多种
 
 ```bash
 pip install exifread piexif pillow_heif ttkbootstrap tkinterdnd2
-
-```bash
 pip install nuitka
+
 nuitka打包命令：
 nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-package=tkinterdnd2 --include-data-file=QPhotoRenamer.ini=QPhotoRenamer.ini --include-data-file=logo.ico=logo.ico --windows-icon-from-ico=logo.ico QPhotoRenamer.py
