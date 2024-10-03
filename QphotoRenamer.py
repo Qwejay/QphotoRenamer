@@ -5,7 +5,7 @@ import exifread
 import piexif
 import pillow_heif
 import ttkbootstrap as ttk
-from tkinter import filedialog, Toplevel, Label, Checkbutton
+from tkinter import filedialog, Toplevel, Label, Checkbutton, Entry
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from threading import Thread, Event
 import logging
@@ -38,7 +38,7 @@ COMMON_DATE_FORMATS = [
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "照片批量重命名 QphotoRenamer 1.0.3 —— QwejayHuang",
+        "window_title": "照片批量重命名 QphotoRenamer 1.0.4 —— QwejayHuang",
         "description": "即将按照拍摄日期重命名照片。只需将照片拖入列表即可快速添加；点击“开始重命名”按钮批量重命名您的照片。",
         "start_renaming": "开始重命名",
         "undo_renaming": "撤销重命名",
@@ -59,10 +59,12 @@ LANGUAGES = {
         "renaming_success": "成功重命名 {0} 个文件，未重命名 {1} 个文件。",
         "all_files_restored": "所有文件已恢复到原始名称。",
         "help_text": "使用说明:\n1. 拖拽文件进列表，或点击“添加文件”按钮选择文件。\n2. 点击“开始重命名”按钮开始重命名文件。\n3. 双击列表中的文件名打开图片。\n4. 右键点击列表中的文件名移除文件。\n5. 点击“撤销重命名”按钮恢复到原始名称。\n6. 点击“设置”按钮更改日期格式。\n7. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n8. 点击“清空列表”按钮清空文件列表。\n9. 点击“停止重命名”按钮停止重命名操作。\n10. 点击文件名显示EXIF信息。",
-        "settings_window_title": "设置"
+        "settings_window_title": "设置",
+        "prefix": "前缀:",
+        "suffix": "后缀:"
     },
     "English": {
-        "window_title": "QphotoRenamer 1.0.3 —— QwejayHuang",
+        "window_title": "QphotoRenamer 1.0.4 —— QwejayHuang",
         "description": "Drag and drop photos into the list for quick addition, and then click ‘Start’ to begin renaming the photos.",
         "start_renaming": "Start",
         "undo_renaming": "Undo",
@@ -83,14 +85,16 @@ LANGUAGES = {
         "renaming_success": "Successfully renamed {0} files, {1} files not renamed.",
         "all_files_restored": "All files have been restored to their original names.",
         "help_text": "Usage Instructions:\n1. Drag files into the list or click the 'Add Files' button to select files.\n2. Click the 'Start' button to begin renaming files.\n3. Double-click on a file name in the list to open the image.\n4. Right-click on a file name in the list to remove the file.\n5. Click the 'Undo' button to restore files to their original names.\n6. Click the 'Settings' button to change the date format.\n7. Check the 'Auto Scroll' option to automatically scroll to the latest added file.\n8. Click the 'Clear List' button to clear the file list.\n9. Click the 'Stop' button to stop the renaming operation.\n10. Click on a file name to display EXIF information.",
-        "settings_window_title": "Settings"
+        "settings_window_title": "Settings",
+        "prefix": "Prefix:",
+        "suffix": "Suffix:"
     }
 }
 
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("照片批量重命名 QphotoRenamer 1.0.3 —— QwejayHuang")
+        self.root.title("照片批量重命名 QphotoRenamer 1.0.4 —— QwejayHuang")
         self.root.geometry("800x600")
         self.root.iconbitmap(icon_path)
 
@@ -99,6 +103,8 @@ class PhotoRenamer:
         self.auto_scroll_var = ttk.BooleanVar(value=True)
         self.use_modification_date_var = ttk.BooleanVar(value=True)  # 默认勾选
         self.language_var = ttk.StringVar(value=self.load_language())
+        self.prefix_var = ttk.StringVar(value="")
+        self.suffix_var = ttk.StringVar(value="")
 
         self.initialize_ui()
         self.load_settings()
@@ -170,6 +176,8 @@ class PhotoRenamer:
                 DATE_FORMAT = config.get("date_format", "%Y%m%d_%H%M%S")
                 self.use_modification_date_var.set(config.get("use_modification_date", True))
                 self.language_var.set(config.get("language", locale.getlocale()[0]))
+                self.prefix_var.set(config.get("prefix", ""))
+                self.suffix_var.set(config.get("suffix", ""))
 
     def set_language(self, language):
         if language in LANGUAGES:
@@ -357,9 +365,12 @@ class PhotoRenamer:
             date_time = self.get_file_modification_date(file_path)
         if date_time:
             base_name = date_time.strftime(DATE_FORMAT)
+            prefix = self.prefix_var.get()
+            suffix = self.suffix_var.get()
             ext = os.path.splitext(filename)[1]
             directory = os.path.dirname(file_path)
-            new_file_path = self.generate_unique_filename(directory, base_name, ext)
+            new_file_name = f"{prefix}{base_name}{suffix}{ext}"
+            new_file_path = self.generate_unique_filename(directory, new_file_name, ext)
             if new_file_path != file_path and not os.path.exists(new_file_path):
                 try:
                     os.rename(file_path, new_file_path)
@@ -438,18 +449,28 @@ class PhotoRenamer:
         language_combobox = ttk.Combobox(settings_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
         language_combobox.grid(row=2, column=1, padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["formats_explanation"], anchor='w').grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["prefix"], anchor='w').grid(row=3, column=0, padx=10, pady=10)
+        prefix_entry = Entry(settings_frame, textvariable=self.prefix_var)
+        prefix_entry.grid(row=3, column=1, padx=10, pady=10)
 
-        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), settings_window))
-        save_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["suffix"], anchor='w').grid(row=4, column=0, padx=10, pady=10)
+        suffix_entry = Entry(settings_frame, textvariable=self.suffix_var)
+        suffix_entry.grid(row=4, column=1, padx=10, pady=10)
 
-    def save_settings(self, date_format, language, settings_window):
+        ttk.Label(settings_frame, text=lang["formats_explanation"], anchor='w').grid(row=5, column=0, columnspan=2, padx=10, pady=10)
+
+        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), settings_window))
+        save_button.grid(row=6, column=0, columnspan=2, padx=10, pady=10)
+
+    def save_settings(self, date_format, language, prefix, suffix, settings_window):
         global DATE_FORMAT
         DATE_FORMAT = date_format
         config = {
             "date_format": DATE_FORMAT,
             "use_modification_date": self.use_modification_date_var.get(),
-            "language": language
+            "language": language,
+            "prefix": prefix,
+            "suffix": suffix
         }
         with open("QphotoRenamer.ini", "w") as f:
             json.dump(config, f)
