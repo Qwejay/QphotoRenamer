@@ -26,15 +26,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Install pyinstaller
-      run: pip install pyinstaller
+    - name: Install Nuitka
+      run: pip install nuitka
 
-    - name: Build executable
+    - name: Build executable with Nuitka
       run: |
-        pyinstaller --onefile --icon=logo.ico --add-data "logo.ico;." QphotoRenamer.py
+        nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-package=tkinterdnd2 --include-data-file=QphotoRenamer.ini=QphotoRenamer.ini --include-data-file=logo.ico=logo.ico --windows-icon-from-ico=logo.ico QphotoRenamer.py
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: executable
-        path: dist/QphotoRenamer.exe
+        path: QphotoRenamer.dist/QphotoRenamer.exe
