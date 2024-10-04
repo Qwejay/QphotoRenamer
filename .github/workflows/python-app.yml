@@ -42,4 +42,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: executable
-        path: ExcelExtractorApp.exe
+        path: QphotoRenamer.exe
