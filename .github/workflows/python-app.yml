@@ -16,6 +16,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -37,4 +42,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: executable
-        path: QphotoRenamer.exe
+        path: ExcelExtractorApp.exe
