@@ -5,7 +5,7 @@ import exifread
 import piexif
 import pillow_heif
 import ttkbootstrap as ttk
-from tkinter import filedialog, Toplevel, Label, Checkbutton, Entry, messagebox
+from tkinter import filedialog, Toplevel, Label, Entry, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from threading import Thread, Event
 import logging
@@ -50,7 +50,6 @@ LANGUAGES = {
         "auto_scroll": "自动滚动",
         "ready": "准备就绪",
         "rename_pattern": "重命名样式:",
-        "use_modification_date": "使用修改日期重命名",
         "language": "语言",
         "save_settings": "保存设置",
         "formats_explanation": "常用日期格式示例:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023",
@@ -64,9 +63,11 @@ LANGUAGES = {
         "suffix": "后缀:",
         "rename_videos": "重命名非图片文件",
         "video_date_basis": "非图片文件重命名依据:",
+        "skip_extensions": "跳过重命名的文件类型（空格分隔）:",
+        "date_basis": "日期依据:",
+        "shot_date": "拍摄日期",
         "modification_date": "修改日期",
         "creation_date": "创建日期",
-        "skip_extensions": "跳过重命名的文件类型（空格分隔）:",
     },
     "English": {
         "window_title": "QphotoRenamer 1.0.5 —— QwejayHuang",
@@ -81,7 +82,6 @@ LANGUAGES = {
         "auto_scroll": "Auto Scroll",
         "ready": "Ready",
         "rename_pattern": "Rename Pattern:",
-        "use_modification_date": "Use Modification Date for Renaming",
         "language": "Language",
         "save_settings": "Save Settings",
         "formats_explanation": "Common Date Formats Examples:\n%Y%m%d_%H%M%S -> 20230729_141530\n%Y-%m-%d %H:%M:%S -> 2023-07-29 14:15:30\n%d-%m-%Y %H:%M:%S -> 29-07-2023 14:15:30\n%Y%m%d -> 20230729\n%H%M%S -> 141530\n%Y-%m-%d -> 2023-07-29\n%d-%m-%Y -> 29-07-2023",
@@ -95,9 +95,11 @@ LANGUAGES = {
         "suffix": "Suffix:",
         "rename_videos": "Rename non-image files",
         "video_date_basis": "Non-image file renaming basis:",
+        "skip_extensions": "File extensions to skip renaming (space-separated):",
+        "date_basis": "Date Basis:",
+        "shot_date": "Shot Date",
         "modification_date": "Modification date",
         "creation_date": "Creation date",
-        "skip_extensions": "File extensions to skip renaming (space-separated):",
     }
 }
 
@@ -113,13 +115,13 @@ class PhotoRenamer:
         self.style = ttk.Style('litera')  # 使用ttkbootstrap主题
 
         self.auto_scroll_var = ttk.BooleanVar(value=True)
-        self.use_modification_date_var = ttk.BooleanVar(value=True)  # 默认勾选
         self.language_var = ttk.StringVar(value=self.load_language())
         self.prefix_var = ttk.StringVar(value="")
         self.suffix_var = ttk.StringVar(value="")
         self.rename_videos_var = ttk.BooleanVar(value=False)
         self.video_date_var = ttk.StringVar(value="modification")  # 默认使用修改日期
         self.skip_extensions_var = ttk.StringVar(value="")
+        self.date_basis_var = ttk.StringVar(value="拍摄日期")  # 默认选择拍摄日期
 
         self.initialize_ui()
         self.load_settings()
@@ -189,12 +191,12 @@ class PhotoRenamer:
             with open("QphotoRenamer.ini", "r") as f:
                 config = json.load(f)
                 DATE_FORMAT = config.get("date_format", "%Y%m%d_%H%M%S")
-                self.use_modification_date_var.set(config.get("use_modification_date", True))
                 self.language_var.set(config.get("language", locale.getlocale()[0]))
                 self.prefix_var.set(config.get("prefix", ""))
                 self.suffix_var.set(config.get("suffix", ""))
                 self.rename_videos_var.set(config.get("rename_videos", False))
                 self.video_date_var.set(config.get("video_date", "modification"))
+                self.date_basis_var.set(config.get("date_basis", "拍摄日期"))
                 SKIP_EXTENSIONS = config.get("skip_extensions", [])
         else:
             # 如果配置文件不存在，使用默认值
@@ -405,19 +407,16 @@ class PhotoRenamer:
 
         is_image = filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.heic'))
 
-        if is_image:
-            exif_data = self.get_heic_data(file_path) if filename.lower().endswith('.heic') else self.get_exif_data(file_path)
-            date_time = exif_data['DateTimeOriginalParsed'] if exif_data and 'DateTimeOriginalParsed' in exif_data else None
-            if not date_time:
-                if self.use_modification_date_var.get():
-                    date_time = self.get_file_modification_date(file_path)
-                else:
-                    date_time = self.get_file_creation_date(file_path)
-        else:
-            if self.video_date_var.get() == "modification":
-                date_time = self.get_file_modification_date(file_path)
+        if self.date_basis_var.get() == "拍摄日期":
+            if is_image:
+                exif_data = self.get_heic_data(file_path) if filename.lower().endswith('.heic') else self.get_exif_data(file_path)
+                date_time = exif_data['DateTimeOriginalParsed'] if exif_data and 'DateTimeOriginalParsed' in exif_data else None
             else:
-                date_time = self.get_file_creation_date(file_path)
+                date_time = None  # 非图片文件不处理拍摄日期
+        elif self.date_basis_var.get() == "修改日期":
+            date_time = self.get_file_modification_date(file_path)
+        elif self.date_basis_var.get() == "创建日期":
+            date_time = self.get_file_creation_date(file_path)
 
         if date_time:
             base_name = date_time.strftime(DATE_FORMAT)
@@ -495,41 +494,34 @@ class PhotoRenamer:
         date_format_combobox = ttk.Combobox(settings_frame, textvariable=date_format_var, values=COMMON_DATE_FORMATS, state="readonly")
         date_format_combobox.grid(row=0, column=1, padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["use_modification_date"], anchor='w').grid(row=1, column=0, padx=10, pady=10)
-        use_modification_date_checkbox = ttk.Checkbutton(settings_frame, variable=self.use_modification_date_var)
-        use_modification_date_checkbox.grid(row=1, column=1, padx=10, pady=10)
-
-        ttk.Label(settings_frame, text=lang["language"], anchor='w').grid(row=2, column=0, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["language"], anchor='w').grid(row=1, column=0, padx=10, pady=10)
         language_combobox = ttk.Combobox(settings_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
-        language_combobox.grid(row=2, column=1, padx=10, pady=10)
+        language_combobox.grid(row=1, column=1, padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["prefix"], anchor='w').grid(row=3, column=0, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["prefix"], anchor='w').grid(row=2, column=0, padx=10, pady=10)
         prefix_entry = Entry(settings_frame, textvariable=self.prefix_var)
-        prefix_entry.grid(row=3, column=1, padx=10, pady=10)
+        prefix_entry.grid(row=2, column=1, padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["suffix"], anchor='w').grid(row=4, column=0, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["suffix"], anchor='w').grid(row=3, column=0, padx=10, pady=10)
         suffix_entry = Entry(settings_frame, textvariable=self.suffix_var)
-        suffix_entry.grid(row=4, column=1, padx=10, pady=10)
+        suffix_entry.grid(row=3, column=1, padx=10, pady=10)
 
-        # 新增控件：重命名非图片文件选项
-        ttk.Checkbutton(settings_frame, text=lang["rename_videos"], variable=self.rename_videos_var).grid(row=5, column=0, columnspan=2, pady=10)
+        ttk.Label(settings_frame, text=lang["date_basis"], anchor='w').grid(row=4, column=0, padx=10, pady=10)
+        date_basis_var = ttk.StringVar(value=self.date_basis_var.get())
+        date_basis_combobox = ttk.Combobox(settings_frame, textvariable=date_basis_var, values=["拍摄日期", "修改日期", "创建日期"], state="readonly")
+        date_basis_combobox.grid(row=4, column=1, padx=10, pady=10)
 
-        # 新增控件：选择非图片文件重命名依据
-        ttk.Label(settings_frame, text=lang["video_date_basis"], anchor='w').grid(row=6, column=0, padx=10, pady=10)
-        ttk.Radiobutton(settings_frame, text=lang["modification_date"], variable=self.video_date_var, value="modification").grid(row=6, column=1, sticky='w', padx=10, pady=10)
-        ttk.Radiobutton(settings_frame, text=lang["creation_date"], variable=self.video_date_var, value="creation").grid(row=7, column=1, sticky='w', padx=10, pady=10)
-
-        ttk.Label(settings_frame, text=lang["skip_extensions"], anchor='w').grid(row=8, column=0, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["skip_extensions"], anchor='w').grid(row=5, column=0, padx=10, pady=10)
         skip_ext_var = ttk.StringVar(value=" ".join(SKIP_EXTENSIONS))
         skip_ext_entry = Entry(settings_frame, textvariable=skip_ext_var)
-        skip_ext_entry.grid(row=8, column=1, padx=10, pady=10)
+        skip_ext_entry.grid(row=5, column=1, padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["formats_explanation"], anchor='w').grid(row=9, column=0, columnspan=2, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["formats_explanation"], anchor='w').grid(row=6, column=0, columnspan=2, padx=10, pady=10)
 
-        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), self.rename_videos_var.get(), self.video_date_var.get(), settings_window, skip_ext_var.get()))
-        save_button.grid(row=10, column=0, columnspan=2, padx=10, pady=10)
+        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), self.rename_videos_var.get(), self.video_date_var.get(), settings_window, skip_ext_var.get(), date_basis_var.get()))
+        save_button.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
 
-    def save_settings(self, date_format, language, prefix, suffix, rename_videos, video_date, settings_window, skip_extensions_input):
+    def save_settings(self, date_format, language, prefix, suffix, rename_videos, video_date, settings_window, skip_extensions_input, date_basis):
         global DATE_FORMAT, SKIP_EXTENSIONS
         DATE_FORMAT = date_format
         skip_ext_input = skip_extensions_input.strip().lower()
@@ -539,12 +531,12 @@ class PhotoRenamer:
             return
         config = {
             "date_format": DATE_FORMAT,
-            "use_modification_date": self.use_modification_date_var.get(),
             "language": language,
             "prefix": prefix,
             "suffix": suffix,
             "rename_videos": rename_videos,
             "video_date": video_date,
+            "date_basis": date_basis,
             "skip_extensions": SKIP_EXTENSIONS
         }
         with open("QphotoRenamer.ini", "w") as f:
