@@ -62,11 +62,11 @@ LANGUAGES = {
         "settings_window_title": "设置",
         "prefix": "前缀:",
         "suffix": "后缀:",
-        "rename_videos": "重命名视频文件",
-        "video_date_basis": "视频文件重命名依据:",
+        "rename_videos": "重命名非图片文件",
+        "video_date_basis": "非图片文件重命名依据:",
         "modification_date": "修改日期",
         "creation_date": "创建日期",
-        "supported_extensions": "支持的文件类型（空格分隔）:",
+        "skip_extensions": "跳过重命名的文件类型（空格分隔）:",
     },
     "English": {
         "window_title": "QphotoRenamer 1.0.5 —— QwejayHuang",
@@ -93,18 +93,15 @@ LANGUAGES = {
         "settings_window_title": "Settings",
         "prefix": "Prefix:",
         "suffix": "Suffix:",
-        "rename_videos": "Rename video files",
-        "video_date_basis": "Video file renaming basis:",
+        "rename_videos": "Rename non-image files",
+        "video_date_basis": "Non-image file renaming basis:",
         "modification_date": "Modification date",
         "creation_date": "Creation date",
-        "supported_extensions": "Supported file extensions (space-separated):",
+        "skip_extensions": "File extensions to skip renaming (space-separated):",
     }
 }
 
-SUPPORTED_EXTENSIONS = [
-    '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.heic',
-    '.mp4', '.avi', '.mkv', '.mov'
-]
+SKIP_EXTENSIONS = []
 
 class PhotoRenamer:
     def __init__(self, root):
@@ -122,6 +119,7 @@ class PhotoRenamer:
         self.suffix_var = ttk.StringVar(value="")
         self.rename_videos_var = ttk.BooleanVar(value=False)
         self.video_date_var = ttk.StringVar(value="modification")  # 默认使用修改日期
+        self.skip_extensions_var = ttk.StringVar(value="")
 
         self.initialize_ui()
         self.load_settings()
@@ -186,7 +184,7 @@ class PhotoRenamer:
         self.status_bar.pack(side=ttk.BOTTOM, fill=ttk.X)
 
     def load_settings(self):
-        global DATE_FORMAT, SUPPORTED_EXTENSIONS
+        global DATE_FORMAT, SKIP_EXTENSIONS
         if os.path.exists("QphotoRenamer.ini"):
             with open("QphotoRenamer.ini", "r") as f:
                 config = json.load(f)
@@ -197,17 +195,11 @@ class PhotoRenamer:
                 self.suffix_var.set(config.get("suffix", ""))
                 self.rename_videos_var.set(config.get("rename_videos", False))
                 self.video_date_var.set(config.get("video_date", "modification"))
-                SUPPORTED_EXTENSIONS = config.get("supported_extensions", [
-                    '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.heic',
-                    '.mp4', '.avi', '.mkv', '.mov'
-                ])
+                SKIP_EXTENSIONS = config.get("skip_extensions", [])
         else:
             # 如果配置文件不存在，使用默认值
             DATE_FORMAT = "%Y%m%d_%H%M%S"
-            SUPPORTED_EXTENSIONS = [
-                '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.heic',
-                '.mp4', '.avi', '.mkv', '.mov'
-            ]
+            SKIP_EXTENSIONS = []
 
     def set_language(self, language):
         if language in LANGUAGES:
@@ -408,22 +400,24 @@ class PhotoRenamer:
             self.progress_var.set((current_index + 1) * 100 / self.files_listbox.size())
             return False
 
-        # 检查是否是视频文件
-        is_video = filename.lower().endswith(('.mp4', '.avi', '.mkv', '.mov'))
-        if is_video:
-            if not self.rename_videos_var.get():
-                # 跳过视频文件
-                return False
-            # 获取视频文件的日期
+        if filename.lower().endswith(tuple(SKIP_EXTENSIONS)):
+            return False
+
+        is_image = filename.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif', '.heic'))
+
+        if is_image:
+            exif_data = self.get_heic_data(file_path) if filename.lower().endswith('.heic') else self.get_exif_data(file_path)
+            date_time = exif_data['DateTimeOriginalParsed'] if exif_data and 'DateTimeOriginalParsed' in exif_data else None
+            if not date_time:
+                if self.use_modification_date_var.get():
+                    date_time = self.get_file_modification_date(file_path)
+                else:
+                    date_time = self.get_file_creation_date(file_path)
+        else:
             if self.video_date_var.get() == "modification":
                 date_time = self.get_file_modification_date(file_path)
             else:
                 date_time = self.get_file_creation_date(file_path)
-        else:
-            exif_data = self.get_heic_data(file_path) if filename.lower().endswith('.heic') else self.get_exif_data(file_path)
-            date_time = exif_data['DateTimeOriginalParsed'] if exif_data and 'DateTimeOriginalParsed' in exif_data else None
-            if not date_time and self.use_modification_date_var.get():
-                date_time = self.get_file_modification_date(file_path)
 
         if date_time:
             base_name = date_time.strftime(DATE_FORMAT)
@@ -471,13 +465,11 @@ class PhotoRenamer:
                 for root, _, files in os.walk(path):
                     for file in files:
                         file_path = os.path.join(root, file)
-                        if (file_path.lower().endswith(tuple(SUPPORTED_EXTENSIONS)) and 
-                            file_path not in current_files):
+                        if file_path not in current_files:
                             self.files_listbox.insert(ttk.END, file_path)
                             if self.auto_scroll_var.get():
                                 self.files_listbox.see(ttk.END)
-            elif (path.lower().endswith(tuple(SUPPORTED_EXTENSIONS)) and 
-                  path not in current_files):
+            elif path not in current_files:
                 self.files_listbox.insert(ttk.END, path)
                 if self.auto_scroll_var.get():
                     self.files_listbox.see(ttk.END)
@@ -519,31 +511,31 @@ class PhotoRenamer:
         suffix_entry = Entry(settings_frame, textvariable=self.suffix_var)
         suffix_entry.grid(row=4, column=1, padx=10, pady=10)
 
-        # 新增控件：重命名视频文件选项
+        # 新增控件：重命名非图片文件选项
         ttk.Checkbutton(settings_frame, text=lang["rename_videos"], variable=self.rename_videos_var).grid(row=5, column=0, columnspan=2, pady=10)
 
-        # 新增控件：选择视频文件重命名依据
+        # 新增控件：选择非图片文件重命名依据
         ttk.Label(settings_frame, text=lang["video_date_basis"], anchor='w').grid(row=6, column=0, padx=10, pady=10)
         ttk.Radiobutton(settings_frame, text=lang["modification_date"], variable=self.video_date_var, value="modification").grid(row=6, column=1, sticky='w', padx=10, pady=10)
         ttk.Radiobutton(settings_frame, text=lang["creation_date"], variable=self.video_date_var, value="creation").grid(row=7, column=1, sticky='w', padx=10, pady=10)
 
-        ttk.Label(settings_frame, text=lang["supported_extensions"], anchor='w').grid(row=8, column=0, padx=10, pady=10)
-        supported_ext_var = ttk.StringVar(value=" ".join(SUPPORTED_EXTENSIONS))
-        supported_ext_entry = Entry(settings_frame, textvariable=supported_ext_var)
-        supported_ext_entry.grid(row=8, column=1, padx=10, pady=10)
+        ttk.Label(settings_frame, text=lang["skip_extensions"], anchor='w').grid(row=8, column=0, padx=10, pady=10)
+        skip_ext_var = ttk.StringVar(value=" ".join(SKIP_EXTENSIONS))
+        skip_ext_entry = Entry(settings_frame, textvariable=skip_ext_var)
+        skip_ext_entry.grid(row=8, column=1, padx=10, pady=10)
 
         ttk.Label(settings_frame, text=lang["formats_explanation"], anchor='w').grid(row=9, column=0, columnspan=2, padx=10, pady=10)
 
-        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), self.rename_videos_var.get(), self.video_date_var.get(), settings_window, supported_ext_var.get()))
+        save_button = ttk.Button(settings_frame, text=lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), self.rename_videos_var.get(), self.video_date_var.get(), settings_window, skip_ext_var.get()))
         save_button.grid(row=10, column=0, columnspan=2, padx=10, pady=10)
 
-    def save_settings(self, date_format, language, prefix, suffix, rename_videos, video_date, settings_window, supported_extensions_input):
-        global DATE_FORMAT, SUPPORTED_EXTENSIONS
+    def save_settings(self, date_format, language, prefix, suffix, rename_videos, video_date, settings_window, skip_extensions_input):
+        global DATE_FORMAT, SKIP_EXTENSIONS
         DATE_FORMAT = date_format
-        supported_ext_input = supported_extensions_input.strip().lower()
-        SUPPORTED_EXTENSIONS = [ext for ext in supported_ext_input.split() if ext.startswith('.')]
-        if not all(ext.startswith('.') for ext in SUPPORTED_EXTENSIONS):
-            messagebox.showerror("错误", "扩展名必须以点号开头，例如 .jpg")
+        skip_ext_input = skip_extensions_input.strip().lower()
+        SKIP_EXTENSIONS = [ext for ext in skip_ext_input.split() if ext.startswith('.')]
+        if not all(ext.startswith('.') for ext in SKIP_EXTENSIONS):
+            messagebox.showerror("错误", "跳过重命名的扩展名必须以点号开头，例如 .jpg")
             return
         config = {
             "date_format": DATE_FORMAT,
@@ -553,7 +545,7 @@ class PhotoRenamer:
             "suffix": suffix,
             "rename_videos": rename_videos,
             "video_date": video_date,
-            "supported_extensions": SUPPORTED_EXTENSIONS
+            "skip_extensions": SKIP_EXTENSIONS
         }
         with open("QphotoRenamer.ini", "w") as f:
             json.dump(config, f)
@@ -562,7 +554,7 @@ class PhotoRenamer:
         settings_window.destroy()  # 关闭设置界面
 
     def select_files(self):
-        file_paths = filedialog.askopenfilenames(filetypes=[("支持的文件", " ".join(SUPPORTED_EXTENSIONS))])
+        file_paths = filedialog.askopenfilenames()
         current_files = set(self.files_listbox.get(0, ttk.END))
         for file_path in file_paths:
             if file_path not in current_files:
