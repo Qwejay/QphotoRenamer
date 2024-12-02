@@ -1,17 +1,8 @@
-name: Build and Package QphotoRenamer
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
 jobs:
   build:
     runs-on: windows-latest
-
+    permissions:
+      contents: write  # Grants permission to create releases
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
