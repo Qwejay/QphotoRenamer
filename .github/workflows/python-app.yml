@@ -30,9 +30,8 @@ jobs:
       - name: Download and extract tkdnd
         run: |
           curl -L -o tkdnd.zip https://github.com/petasis/tkdnd/releases/download/tkdnd-release-test-v2.9.4-rc3/tkdnd-2.9.4-windows-x64.zip
-          tar -xf tkdnd.zip
           mkdir -p tkdnd
-          mv tkdnd-2.9.4/* tkdnd/
+          tar -xf tkdnd.zip -C tkdnd
 
       - name: Build with PyInstaller
         run: |
