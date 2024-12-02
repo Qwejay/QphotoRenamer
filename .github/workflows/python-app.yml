@@ -1,4 +1,4 @@
-name: Build and Package
+name: Build and Package QphotoRenamer
 
 on:
   push:
@@ -13,33 +13,33 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Download and extract tkdnd
+        run: |
+          curl -L -o tkdnd.zip https://github.com/petasis/tkdnd/releases/download/tkdnd-release-test-v2.9.4-rc3/tkdnd-2.9.4-windows-x64.zip
+          tar -xf tkdnd.zip
+          mkdir -p tkdnd
+          mv tkdnd-2.9.4/* tkdnd/
 
-    - name: Install Nuitka
-      run: pip install nuitka
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --onefile --windowed --icon=logo.ico --add-data "QphotoRenamer.ini;." --add-data "logo.ico;." --add-data "tkdnd;tkdnd" QphotoRenamer.py
 
-    - name: Build executable with Nuitka
-      run: |
-        nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-data-file=QphotoRenamer.ini=QphotoRenamer.ini --include-data-file=logo.ico=logo.ico --windows-icon-from-ico=logo.ico QphotoRenamer.py
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: executable
-        path: dist/QphotoRenamer.exe  # 确保路径正确
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: QphotoRenamer-build
+          path: dist/QphotoRenamer.exe
