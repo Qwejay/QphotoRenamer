@@ -15,7 +15,7 @@ QphotoRenamer 是一个批量重命名工具，支持所有文件格式，如果
 [查看所有版本](https://github.com/Qwejay/QphotoRenamer/releases)
 
 ## QphotoRenamer 更新日志
-### 版本 1.0.5 (2024-12-13)
+### 版本 1.0.6 (2024-12-13)
 新增功能：
 - 支持无拍摄日期则保留原文件名。
 - 列表增加颜色提示。
