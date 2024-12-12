@@ -38,7 +38,7 @@ COMMON_DATE_FORMATS = [
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "照片批量重命名 QphotoRenamer 1.0.5 —— QwejayHuang",
+        "window_title": "照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang",
         "description_base": "拖动照片，即将按照",
         "description_suffix": "重命名文件，如果无法找到拍摄日期，则使用",
         "start_renaming": "开始重命名",
@@ -58,7 +58,19 @@ LANGUAGES = {
         "renaming_stopped": "重命名操作已停止。",
         "renaming_success": "成功重命名 {0} 个文件，未重命名 {1} 个文件。",
         "all_files_restored": "所有文件已恢复到原始名称。",
-        "help_text": "使用说明:\n1. 拖拽文件进列表，或点击“添加文件”按钮选择文件。\n2. 点击“开始重命名”按钮开始重命名文件。\n3. 双击列表中的文件名打开图片。\n4. 右键点击列表中的文件名移除文件。\n5. 点击“撤销重命名”按钮恢复到原始名称。\n6. 点击“设置”按钮更改日期格式。\n7. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n8. 点击“清空列表”按钮清空文件列表。\n9. 点击“停止重命名”按钮停止重命名操作。\n10. 点击文件名显示EXIF信息。",
+        "help_text": "使用说明:\n\
+1. 拖拽文件或文件夹到列表中，或点击“添加文件”按钮选择文件。\n\
+2. 点击“开始重命名”按钮，程序将根据设置的日期格式重命名文件。\n\
+3. 如果无法找到拍摄日期，程序将根据设置的备用日期（修改日期、创建日期或保留原名）进行处理。\n\
+4. 双击列表中的文件名可打开文件。\n\
+5. 右键点击列表中的文件名可移除文件。\n\
+6. 点击“撤销重命名”按钮可恢复文件到原始名称。\n\
+7. 点击“设置”按钮可更改日期格式、前缀、后缀等设置。\n\
+8. 勾选“自动滚动”选项，列表会自动滚动到最新添加的文件。\n\
+9. 点击“清空列表”按钮可清空文件列表。\n\
+10. 点击“停止重命名”按钮可停止当前的重命名操作。\n\
+11. 重命名完成后，已重命名的文件项会显示为绿色，重命名失败的文件项会显示为红色。\n\
+12. 点击文件名可显示文件的EXIF信息。",
         "settings_window_title": "设置",
         "prefix": "前缀:",
         "suffix": "后缀:",
@@ -70,11 +82,12 @@ LANGUAGES = {
         ],
         "alternate_dates": [
             {"display": "修改日期", "value": "修改日期"},
-            {"display": "创建日期", "value": "创建日期"}
+            {"display": "创建日期", "value": "创建日期"},
+            {"display": "保留原名", "value": "保留原名"}
         ]
     },
     "English": {
-        "window_title": "QphotoRenamer 1.0.5 —— QwejayHuang",
+        "window_title": "QphotoRenamer 1.0.6 —— QwejayHuang",
         "description_base": "Drag and drop photos to begin renaming by ",
         "description_suffix": ",If the shooting date cannot be found, use",
         "start_renaming": "Start",
@@ -94,7 +107,19 @@ LANGUAGES = {
         "renaming_stopped": "Renaming operation has been stopped.",
         "renaming_success": "Successfully renamed {0} files, {1} files not renamed.",
         "all_files_restored": "All files have been restored to their original names.",
-        "help_text": "Usage Instructions:\n1. Drag files into the list or click the 'Add Files' button to select files.\n2. Click the 'Start' button to begin renaming files.\n3. Double-click on a file name in the list to open the image.\n4. Right-click on a file name in the list to remove the file.\n5. Click the 'Undo' button to restore files to their original names.\n6. Click the 'Settings' button to change the date format.\n7. Check the 'Auto Scroll' option to automatically scroll to the latest added file.\n8. Click the 'Clear List' button to clear the file list.\n9. Click the 'Stop' button to stop the renaming operation.\n10. Click on a file name to display EXIF information.",
+        "help_text": "Usage Instructions:\n\
+1. Drag files or folders into the list or click the 'Add Files' button to select files.\n\
+2. Click the 'Start' button to begin renaming files.\n\
+3. If the shooting date cannot be found, the program will use the alternate date (modified date, created date, or keep original name).\n\
+4. Double-click on a file name in the list to open the image.\n\
+5. Right-click on a file name in the list to remove the file.\n\
+6. Click the 'Undo' button to restore files to their original names.\n\
+7. Click the 'Settings' button to change the date format, prefix, suffix, etc.\n\
+8. Check the 'Auto Scroll' option to automatically scroll to the latest added file.\n\
+9. Click the 'Clear List' button to clear the file list.\n\
+10. Click the 'Stop' button to stop the renaming operation.\n\
+11. After renaming, successfully renamed files will be marked green, and failed files will be marked red.\n\
+12. Click on a file name to display EXIF information.",
         "settings_window_title": "Settings",
         "prefix": "Prefix:",
         "suffix": "Suffix:",
@@ -106,7 +131,8 @@ LANGUAGES = {
         ],
         "alternate_dates": [
             {"display": "Modified Date", "value": "修改日期"},
-            {"display": "Created Date", "value": "创建日期"}
+            {"display": "Created Date", "value": "创建日期"},
+            {"display": "Original Name", "value": "保留原名"}
         ]
     }
 }
@@ -118,7 +144,7 @@ ALTERNATE_DATE_BASIS = "modification"
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("照片批量重命名 QphotoRenamer 1.0.5 —— QwejayHuang")
+        self.root.title("照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang")
         self.root.geometry("800x600")
         self.root.iconbitmap(icon_path)
 
@@ -161,7 +187,11 @@ class PhotoRenamer:
         self.alternate_date_combobox = ttk.Combobox(self.description_frame, textvariable=self.alternate_date_var, values=[item['display'] for item in self.lang["alternate_dates"]], state="readonly", width=10)
         self.alternate_date_combobox.pack(side=ttk.LEFT)
 
-        # 使用 Treeview 替代 Listbox
+        # 在初始化UI时绑定下拉框的选项变化事件
+        self.date_basis_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_new_name_preview())
+        self.alternate_date_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_new_name_preview())
+
+        # 使用 Treeview
         columns = ('filename', 'status')
         self.files_tree = ttk.Treeview(main_frame, columns=columns, show='headings')
         self.files_tree.heading('filename', text='文件名')
@@ -372,46 +402,46 @@ class PhotoRenamer:
         renamed_files_count = 0
 
         total_files = len(self.files_tree.get_children())
-        batch_size = 100
-        for start in range(0, total_files, batch_size):
+
+        # 如果没有文件需要处理，提示用户
+        if total_files == 0:
+            self.update_status_bar("ready")
+            messagebox.showinfo("提示", "没有文件需要重命名。")
+            renaming_in_progress = False
+            self.start_button.config(state=ttk.NORMAL)
+            self.stop_button.config(state=ttk.DISABLED)
+            return
+
+        for item in self.files_tree.get_children():
             if stop_event.is_set():
                 stop_event.clear()
                 self.update_status_bar("renaming_stopped")
                 break
 
-            end = min(start + batch_size, total_files)
-            items = self.files_tree.get_children()[start:end]
-            for item in items:
-                if stop_event.is_set():
-                    stop_event.clear()
-                    self.update_status_bar("renaming_stopped")
-                    break
+            file_path = self.files_tree.item(item, 'values')[0]
+            if file_path not in processed_files:
+                current_renaming_file = file_path
+                self.update_status_bar("renaming_in_progress", os.path.basename(file_path))
+                renamed = self.rename_photo(file_path, item)
+                if renamed:
+                    processed_files.add(file_path)
+                    self.files_tree.set(item, 'status', '已重命名')
+                    self.files_tree.item(item, tags=('renamed',))  # 标记为已重命名
+                    renamed_files_count += 1
+                else:
+                    self.files_tree.set(item, 'status', '未重命名')
+                    self.files_tree.item(item, tags=('failed',))  # 标记为重命名失败
+                    unrenamed_files += 1
 
-                file_path = self.files_tree.item(item, 'values')[0]
-                if file_path not in processed_files:
-                    current_renaming_file = file_path
-                    self.update_status_bar("renaming_in_progress", os.path.basename(file_path))
-                    renamed = self.rename_photo(file_path, item)
-                    if renamed:
-                        processed_files.add(file_path)
-                        self.files_tree.set(item, 'status', '已重命名')
-                        renamed_files_count += 1
-                    else:
-                        self.files_tree.set(item, 'status', '未重命名')
-                        unrenamed_files += 1
-
-                    self.progress_var.set((start + items.index(item) + 1) * 100 / total_files)
-                    if self.auto_scroll_var.get():
-                        self.files_tree.see(item)
-
-                if stop_event.is_set():
-                    stop_event.clear()
-                    self.update_status_bar("renaming_stopped")
-                    break
-
-            self.root.update_idletasks()
+                self.progress_var.set((renamed_files_count + unrenamed_files) * 100 / total_files)
+                if self.auto_scroll_var.get():
+                    self.files_tree.see(item)
 
         self.update_status_bar("renaming_success", renamed_files_count, unrenamed_files)
+
+        # 设置样式：已重命名的文件项为绿色，重命名失败的文件项为红色
+        self.files_tree.tag_configure('renamed', background='lightgreen')
+        self.files_tree.tag_configure('failed', background='lightcoral')
 
         self.undo_button.config(state=ttk.NORMAL)
         renaming_in_progress = False
@@ -445,6 +475,10 @@ class PhotoRenamer:
                     shot_date = self.get_file_modification_date(file_path)
                 elif self.alternate_date_var.get() == "创建日期":
                     shot_date = self.get_file_creation_date(file_path)
+                elif self.alternate_date_var.get() == "保留原名":
+                    self.files_tree.set(item, 'status', '保留原名')
+                    unrenamed_files += 1
+                    return False
         elif self.date_basis_var.get() == "修改日期":
             shot_date = self.get_file_modification_date(file_path)
         elif self.date_basis_var.get() == "创建日期":
@@ -489,8 +523,21 @@ class PhotoRenamer:
                 exif_data = {}
                 if 'EXIF DateTimeOriginal' in tags:
                     date_str = str(tags['EXIF DateTimeOriginal'])
-                    exif_data['DateTimeOriginal'] = date_str
                     exif_data['DateTimeOriginalParsed'] = datetime.datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+                if 'Image Model' in tags:
+                    exif_data['Model'] = str(tags['Image Model'])
+                if 'EXIF LensModel' in tags:
+                    exif_data['LensModel'] = str(tags['EXIF LensModel'])
+                if 'EXIF ISOSpeedRatings' in tags:
+                    exif_data['ISOSpeedRatings'] = str(tags['EXIF ISOSpeedRatings'])
+                if 'EXIF FNumber' in tags:
+                    exif_data['FNumber'] = str(tags['EXIF FNumber'])
+                if 'EXIF ExposureTime' in tags:
+                    exif_data['ExposureTime'] = str(tags['EXIF ExposureTime'])
+                if 'Image ImageWidth' in tags:
+                    exif_data['ImageWidth'] = str(tags['Image ImageWidth'])
+                if 'Image ImageLength' in tags:
+                    exif_data['ImageHeight'] = str(tags['Image ImageLength'])
                 return exif_data
         except FileNotFoundError as e:
             logging.error(f"文件不存在: {file_path}, 错误: {e}")
@@ -505,8 +552,21 @@ class PhotoRenamer:
             exif_data = {}
             if 'Exif' in exif_dict and piexif.ExifIFD.DateTimeOriginal in exif_dict['Exif']:
                 date_str = exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal].decode('utf-8')
-                exif_data['DateTimeOriginal'] = date_str
                 exif_data['DateTimeOriginalParsed'] = datetime.datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+            if 'Exif' in exif_dict and piexif.ExifIFD.ISOSpeedRatings in exif_dict['Exif']:
+                exif_data['ISOSpeedRatings'] = exif_dict['Exif'][piexif.ExifIFD.ISOSpeedRatings]
+            if 'Exif' in exif_dict and piexif.ExifIFD.FNumber in exif_dict['Exif']:
+                exif_data['FNumber'] = exif_dict['Exif'][piexif.ExifIFD.FNumber]
+            if 'Exif' in exif_dict and piexif.ExifIFD.ExposureTime in exif_dict['Exif']:
+                exif_data['ExposureTime'] = exif_dict['Exif'][piexif.ExifIFD.ExposureTime]
+            if 'Exif' in exif_dict and piexif.ExifIFD.LensModel in exif_dict['Exif']:
+                exif_data['LensModel'] = exif_dict['Exif'][piexif.ExifIFD.LensModel].decode('utf-8')
+            if 'Exif' in exif_dict and piexif.ImageIFD.Model in exif_dict['0th']:
+                exif_data['Model'] = exif_dict['0th'][piexif.ImageIFD.Model].decode('utf-8')
+            if 'Exif' in exif_dict and piexif.ImageIFD.ImageWidth in exif_dict['0th']:
+                exif_data['ImageWidth'] = exif_dict['0th'][piexif.ImageIFD.ImageWidth]
+            if 'Exif' in exif_dict and piexif.ImageIFD.ImageLength in exif_dict['0th']:
+                exif_data['ImageHeight'] = exif_dict['0th'][piexif.ImageIFD.ImageLength]
             return exif_data
         except Exception as e:
             logging.error(f"读取HEIC数据失败: {file_path}, 错误: {e}")
@@ -593,20 +653,106 @@ class PhotoRenamer:
         if item:
             file_path = self.files_tree.item(item, 'values')[0]
             exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            date_time = exif_data.get('DateTimeOriginalParsed', None)
-            if not date_time:
+            exif_info = self.extract_exif_info(file_path, exif_data)
+            self.create_tooltip(event.widget, exif_info)
+
+    def extract_exif_info(self, file_path, exif_data):
+        exif_info = ""
+
+        # 新名称
+        new_name = self.generate_new_name(file_path, exif_data)
+        exif_info += f"新名称: {new_name}\n"
+
+        # 修改日期
+        mod_date = self.get_file_modification_date(file_path)
+        if mod_date:
+            exif_info += f"修改日期: {mod_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+        # 创建日期
+        create_date = self.get_file_creation_date(file_path)
+        if create_date:
+            exif_info += f"创建日期: {create_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+        # 如果存在EXIF信息，则显示更多详细信息
+        if exif_data:
+            # 拍摄日期
+            if 'DateTimeOriginalParsed' in exif_data:
+                exif_info += f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+            # 设备
+            if 'Model' in exif_data:
+                exif_info += f"设备: {exif_data['Model']}\n"
+
+            # 镜头
+            if 'LensModel' in exif_data:
+                exif_info += f"镜头: {exif_data['LensModel']}\n"
+
+            # ISO
+            if 'ISOSpeedRatings' in exif_data:
+                exif_info += f"ISO: {exif_data['ISOSpeedRatings']}\n"
+
+            # 光圈
+            if 'FNumber' in exif_data:
+                exif_info += f"光圈: f/{exif_data['FNumber']}\n"
+
+            # 快门速度
+            if 'ExposureTime' in exif_data:
+                exif_info += f"快门速度: {exif_data['ExposureTime']} 秒\n"
+
+            # 分辨率
+            if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
+                exif_info += f"分辨率: {exif_data['ImageWidth']}x{exif_data['ImageHeight']}\n"
+
+        return exif_info
+
+    def update_new_name_preview(self):
+        # 更新新名称的预览
+        selected_item = self.files_tree.selection()
+        if selected_item:
+            file_path = self.files_tree.item(selected_item, 'values')[0]
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            new_name = self.generate_new_name(file_path, exif_data)
+            self.status_bar.config(text=f"新名称预览: {new_name}")
+
+    def generate_new_name(self, file_path, exif_data):
+        # 根据用户选择的日期格式或备用日期生成新名称
+        if self.date_basis_var.get() == "拍摄日期":
+            if exif_data and 'DateTimeOriginalParsed' in exif_data:
+                base_name = exif_data['DateTimeOriginalParsed'].strftime(DATE_FORMAT)
+            else:
+                # 如果没有EXIF信息，使用备用日期
                 if self.alternate_date_var.get() == "修改日期":
-                    date_time = self.get_file_modification_date(file_path)
+                    mod_date = self.get_file_modification_date(file_path)
+                    if mod_date:
+                        base_name = mod_date.strftime(DATE_FORMAT)
+                    else:
+                        base_name = os.path.splitext(os.path.basename(file_path))[0]  # 保留原名
                 elif self.alternate_date_var.get() == "创建日期":
-                    date_time = self.get_file_creation_date(file_path)
-            if date_time:
-                base_name = date_time.strftime(DATE_FORMAT)
-                ext = os.path.splitext(file_path)[1]
-                new_file_name = f"{base_name}{ext}"
-                exif_info = f"新名称: {new_file_name}\n"
-                if exif_data.get('DateTimeOriginalParsed'):
-                    exif_info += f"拍摄日期: {exif_data.get('DateTimeOriginal', '未知')}\n"
-                self.create_tooltip(event.widget, exif_info)
+                    create_date = self.get_file_creation_date(file_path)
+                    if create_date:
+                        base_name = create_date.strftime(DATE_FORMAT)
+                    else:
+                        base_name = os.path.splitext(os.path.basename(file_path))[0]  # 保留原名
+                else:
+                    base_name = os.path.splitext(os.path.basename(file_path))[0]  # 保留原名
+        elif self.date_basis_var.get() == "修改日期":
+            mod_date = self.get_file_modification_date(file_path)
+            if mod_date:
+                base_name = mod_date.strftime(DATE_FORMAT)
+            else:
+                base_name = os.path.splitext(os.path.basename(file_path))[0]  # 保留原名
+        elif self.date_basis_var.get() == "创建日期":
+            create_date = self.get_file_creation_date(file_path)
+            if create_date:
+                base_name = create_date.strftime(DATE_FORMAT)
+            else:
+                base_name = os.path.splitext(os.path.basename(file_path))[0]  # 保留原名
+
+        prefix = self.prefix_var.get()
+        suffix = self.suffix_var.get()
+        ext = os.path.splitext(file_path)[1]
+        new_name = f"{prefix}{base_name}{suffix}{ext}"
+        return new_name
 
     def create_tooltip(self, widget, exif_info):
         if hasattr(widget, 'tooltip_window') and widget.tooltip_window:
