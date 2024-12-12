@@ -11,11 +11,8 @@ QphotoRenamer 是一个批量重命名工具，支持所有文件格式，如果
 - 支持设置重命名样式和语言。
 - 支持自动滚动和清空文件列表。
 
-![1](https://github.com/user-attachments/assets/fccd78c4-6571-423a-9036-06a1e0cebdf6)
-![2](https://github.com/user-attachments/assets/48de58d2-bf64-4f5a-9f6f-a285dd2d0481)
-![20241213012811](https://github.com/user-attachments/assets/6c39367b-5527-4a7e-a7d0-2b7499d83004)
-
-
+![20241213025306](https://github.com/user-attachments/assets/8c82573c-7f1f-498f-a439-8f01399ca3f8)
+![20241213025406](https://github.com/user-attachments/assets/4645554b-8258-4663-9788-2531c7f8ecdf)
 
 ## 下载
 [查看所有版本](https://github.com/Qwejay/QphotoRenamer/releases)
