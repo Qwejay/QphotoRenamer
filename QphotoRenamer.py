@@ -13,6 +13,7 @@ import re
 import json
 import locale
 import subprocess
+import webbrowser
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -38,8 +39,8 @@ COMMON_DATE_FORMATS = [
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang",
-        "description_base": "拖动照片，即将按照",
+        "window_title": "文件&照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang",
+        "description_base": "拖动文件&照片，即将按照",
         "description_suffix": "重命名文件，如果无法找到拍摄日期，则使用",
         "start_renaming": "开始重命名",
         "undo_renaming": "撤销重命名",
@@ -49,6 +50,7 @@ LANGUAGES = {
         "add_files": "添加文件",
         "help": "帮助",
         "auto_scroll": "自动滚动",
+        "check_for_updates": "检查更新",
         "ready": "准备就绪",
         "rename_pattern": "重命名样式:",
         "language": "语言",
@@ -98,6 +100,7 @@ LANGUAGES = {
         "add_files": "Add Files",
         "help": "Help",
         "auto_scroll": "Auto Scroll",
+        "check_for_updates": "Check for Updates",
         "ready": "Ready",
         "rename_pattern": "Rename Pattern:",
         "language": "Language",
@@ -144,7 +147,7 @@ ALTERNATE_DATE_BASIS = "modification"
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang")
+        self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang")
         self.root.geometry("800x600")
         self.root.iconbitmap(icon_path)
 
@@ -207,41 +210,57 @@ class PhotoRenamer:
         progress = ttk.Progressbar(main_frame, variable=self.progress_var, maximum=100)
         progress.pack(fill=ttk.X, padx=10, pady=10)
 
+        # 按钮区域
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=ttk.X, padx=10, pady=10)
 
+        # 开始重命名按钮
         self.start_button = ttk.Button(button_frame, text=self.lang["start_renaming"], command=lambda: self.rename_photos())
         self.start_button.pack(side=ttk.LEFT, padx=5)
         self.start_button.text_key = "start_renaming"
 
+        # 撤销重命名按钮
         self.undo_button = ttk.Button(button_frame, text=self.lang["undo_renaming"], command=self.undo_rename)
         self.undo_button.pack(side=ttk.LEFT, padx=5)
         self.undo_button.text_key = "undo_renaming"
 
+        # 停止重命名按钮
         self.stop_button = ttk.Button(button_frame, text=self.lang["stop_renaming"], command=self.stop_renaming)
         self.stop_button.pack(side=ttk.LEFT, padx=5)
         self.stop_button.text_key = "stop_renaming"
 
+        # 设置按钮
         self.settings_button = ttk.Button(button_frame, text=self.lang["settings"], command=self.open_settings)
         self.settings_button.pack(side=ttk.LEFT, padx=5)
         self.settings_button.text_key = "settings"
 
+        # 清空列表按钮
         self.clear_button = ttk.Button(button_frame, text=self.lang["clear_list"], command=lambda: self.clear_file_list())
         self.clear_button.pack(side=ttk.LEFT, padx=5)
         self.clear_button.text_key = "clear_list"
 
+        # 添加文件按钮
         self.select_files_button = ttk.Button(button_frame, text=self.lang["add_files"], command=lambda: self.select_files())
         self.select_files_button.pack(side=ttk.LEFT, padx=5)
         self.select_files_button.text_key = "add_files"
 
+        # 帮助按钮
         self.help_button = ttk.Button(button_frame, text=self.lang["help"], command=self.show_help)
         self.help_button.pack(side=ttk.LEFT, padx=5)
         self.help_button.text_key = "help"
 
+        # 自动滚动复选框
         self.auto_scroll_checkbox = ttk.Checkbutton(button_frame, text=self.lang["auto_scroll"], variable=self.auto_scroll_var)
         self.auto_scroll_checkbox.pack(side=ttk.LEFT, padx=5)
         self.auto_scroll_checkbox.text_key = "auto_scroll"
 
+        # 检查更新超链接
+        self.update_link = ttk.Label(button_frame, text=self.lang.get("check_for_updates", "检查更新"), foreground="blue", cursor="hand2")
+        self.update_link.pack(side=ttk.RIGHT, padx=5)
+        self.update_link.bind("<Button-1>", lambda e: self.open_update_link())
+        self.update_link.text_key = "check_for_updates" 
+
+        # 状态栏
         self.status_bar = ttk.Label(self.root, text=self.lang["ready"], relief=ttk.SUNKEN, anchor=ttk.W)
         self.status_bar.pack(side=ttk.BOTTOM, fill=ttk.X)
         self.status_bar.text_key = "ready"
@@ -797,6 +816,9 @@ class PhotoRenamer:
                 config = json.load(f)
                 return config.get("language", "简体中文")
         return "简体中文"
+
+    def open_update_link(self):
+        webbrowser.open("https://github.com/Qwejay/QphotoRenamer")
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
