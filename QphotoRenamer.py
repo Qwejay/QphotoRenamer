@@ -28,20 +28,20 @@ unrenamed_files = 0
 current_renaming_file = None
 
 COMMON_DATE_FORMATS = [
-    "%Y%m%d_%H%M%S",    # 20230729_141530
-    "%Y-%m-%d %H:%M:%S",  # 2023-07-29 14:15:30
-    "%d-%m-%Y %H:%M:%S",  # 29-07-2023 14:15:30
-    "%Y%m%d",            # 20230729
+    "%Y%m%d_%H%M%S",    # 20240729_141530
+    "%Y-%m-%d %H:%M:%S",  # 2024-07-29 14:15:30
+    "%d-%m-%Y %H:%M:%S",  # 29-07-2024 14:15:30
+    "%Y%m%d",            # 20240729
     "%H%M%S",            # 141530
-    "%Y-%m-%d",          # 2023-07-29
-    "%d-%m-%Y"           # 29-07-2023
+    "%Y-%m-%d",          # 2024-07-29
+    "%d-%m-%Y"           # 29-07-2024
 ]
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "文件&照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang",
+        "window_title": "文件&照片批量重命名 QphotoRenamer 1.0.7 —— QwejayHuang",
         "description_base": "拖动文件&照片，即将按照",
-        "description_suffix": "重命名文件，如果无法找到拍摄日期，则使用",
+        "description_suffix": "重命名文件，如无拍摄日期(或者不是图片)，则使用",
         "start_renaming": "开始重命名",
         "undo_renaming": "撤销重命名",
         "stop_renaming": "停止重命名",
@@ -50,7 +50,7 @@ LANGUAGES = {
         "add_files": "添加文件",
         "help": "帮助",
         "auto_scroll": "自动滚动",
-        "check_for_updates": "检查更新",
+        "check_for_updates": "反馈&检查更新",
         "ready": "准备就绪",
         "rename_pattern": "重命名样式:",
         "language": "语言",
@@ -89,7 +89,7 @@ LANGUAGES = {
         ]
     },
     "English": {
-        "window_title": "QphotoRenamer 1.0.6 —— QwejayHuang",
+        "window_title": "QphotoRenamer 1.0.7 —— QwejayHuang",
         "description_base": "Drag and drop photos to begin renaming by ",
         "description_suffix": ",If the shooting date cannot be found, use",
         "start_renaming": "Start",
@@ -147,7 +147,7 @@ ALTERNATE_DATE_BASIS = "modification"
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.6 —— QwejayHuang")
+        self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.7 —— QwejayHuang")
         self.root.geometry("800x600")
         self.root.iconbitmap(icon_path)
 
@@ -199,6 +199,13 @@ class PhotoRenamer:
         self.files_tree = ttk.Treeview(main_frame, columns=columns, show='headings')
         self.files_tree.heading('filename', text='文件名')
         self.files_tree.heading('status', text='状态')
+
+        # 设置 status 列居中对齐，并设置最小宽度
+        self.files_tree.column('status', anchor='center', width=100, minwidth=100)  # 最小宽度为100
+
+        # 设置 filename 列自动调整宽度
+        self.files_tree.column('filename', stretch=True, width=500)  # 初始宽度为500
+
         self.files_tree.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
         self.files_tree.drop_target_register(DND_FILES)
         self.files_tree.dnd_bind('<<Drop>>', lambda e: self.on_drop(e))
@@ -255,7 +262,7 @@ class PhotoRenamer:
         self.auto_scroll_checkbox.text_key = "auto_scroll"
 
         # 检查更新超链接
-        self.update_link = ttk.Label(button_frame, text=self.lang.get("check_for_updates", "检查更新"), foreground="blue", cursor="hand2")
+        self.update_link = ttk.Label(button_frame, text=self.lang.get("check_for_updates", "反馈&检查更新"), foreground="blue", cursor="hand2")
         self.update_link.pack(side=ttk.RIGHT, padx=5)
         self.update_link.bind("<Button-1>", lambda e: self.open_update_link())
         self.update_link.text_key = "check_for_updates" 
@@ -264,6 +271,38 @@ class PhotoRenamer:
         self.status_bar = ttk.Label(self.root, text=self.lang["ready"], relief=ttk.SUNKEN, anchor=ttk.W)
         self.status_bar.pack(side=ttk.BOTTOM, fill=ttk.X)
         self.status_bar.text_key = "ready"
+
+    def on_drop(self, event):
+        paths = re.findall(r'(?<=\{)[^{}]*(?=\})|[^{}\s]+', event.data)
+        for path in paths:
+            path = path.strip().strip('{}')
+            if os.path.isfile(path):
+                if not any(path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
+                    # 检测文件的拍摄日期、创建日期和修改日期
+                    status = self.detect_file_status(path)
+                    self.files_tree.insert('', 'end', values=(path, status))
+                    self.adjust_treeview_column_width()  # 调整列宽
+            elif os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        if not any(file_path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
+                            # 检测文件的拍摄日期、创建日期和修改日期
+                            status = self.detect_file_status(file_path)
+                            self.files_tree.insert('', 'end', values=(file_path, status))
+                            self.adjust_treeview_column_width()  # 调整列宽
+
+    def adjust_treeview_column_width(self):
+        """根据文件名的长度调整 Treeview 的列宽"""
+        max_width = 500  # 初始宽度
+        for item in self.files_tree.get_children():
+            filename = self.files_tree.item(item, 'values')[0]
+            filename_length = len(filename)
+            if filename_length * 10 > max_width:  # 假设每个字符大约占用10像素
+                max_width = filename_length * 10
+
+        # 设置 filename 列的宽度
+        self.files_tree.column('filename', width=max_width)
 
     def load_settings(self):
         global DATE_FORMAT, SKIP_EXTENSIONS
@@ -416,6 +455,9 @@ class PhotoRenamer:
         self.start_button.config(state=ttk.DISABLED)
         self.stop_button.config(state=ttk.NORMAL)
 
+        # 清除旧的重命名记录
+        original_to_new_mapping.clear()
+
         processed_files.clear()
         unrenamed_files = 0
         renamed_files_count = 0
@@ -473,6 +515,14 @@ class PhotoRenamer:
         filename = os.path.basename(file_path)
         logging.info(f"处理文件: {file_path}")
 
+        # 检查文件是否已经被重命名过
+        original_file_path = file_path
+        if file_path in original_to_new_mapping:
+            # 如果已经被重命名过，则使用原始文件路径
+            original_file_path = original_to_new_mapping[file_path]
+            file_path = original_file_path
+            filename = os.path.basename(file_path)
+
         if re.match(r'\d{8}_\d{6}\.\w+', filename):
             logging.info(f"文件名已符合格式: {filename}")
             self.update_status_bar("renaming_in_progress", os.path.basename(file_path))
@@ -521,19 +571,30 @@ class PhotoRenamer:
             try:
                 os.rename(file_path, new_file_path)
                 logging.info(f'重命名成功: "{file_path}" 重命名为 "{new_file_path}"')
-                original_to_new_mapping[file_path] = new_file_path
-                self.files_tree.set(item, 'status', '已按设置日期重命名')
+                # 更新映射关系
+                original_to_new_mapping[original_file_path] = new_file_path
+                # 更新列表中的文件名和状态
+                self.files_tree.set(item, 'filename', new_file_path)
+                self.files_tree.set(item, 'status', '已重命名')
+                self.files_tree.item(item, tags=('renamed',))  # 标记为已重命名
                 return True
             except Exception as e:
                 logging.error(f"重命名失败: {file_path}, 错误: {e}")
                 self.files_tree.set(item, 'status', f'错误: {e}')
+                self.files_tree.item(item, tags=('failed',))  # 标记为重命名失败
         else:
             logging.info(f'跳过重命名: "{file_path}" 已经是重命名后的名字')
             self.files_tree.set(item, 'status', '已重命名')
+            self.files_tree.item(item, tags=('renamed',))  # 标记为已重命名
 
         return False
 
     def get_exif_data(self, file_path):
+        """获取文件的 EXIF 信息，如果文件已经被重命名，则使用新文件的路径"""
+        if file_path in original_to_new_mapping:
+            # 如果文件已经被重命名，则使用新文件的路径
+            file_path = original_to_new_mapping[file_path]
+
         try:
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"文件不存在: {file_path}")
@@ -565,6 +626,11 @@ class PhotoRenamer:
         return None
 
     def get_heic_data(self, file_path):
+        """获取 HEIC 文件的 EXIF 信息，如果文件已经被重命名，则使用新文件的路径"""
+        if file_path in original_to_new_mapping:
+            # 如果文件已经被重命名，则使用新文件的路径
+            file_path = original_to_new_mapping[file_path]
+
         try:
             heif_file = pillow_heif.read_heif(file_path)
             exif_dict = piexif.load(heif_file.info['exif'])
@@ -590,6 +656,68 @@ class PhotoRenamer:
         except Exception as e:
             logging.error(f"读取HEIC数据失败: {file_path}, 错误: {e}")
         return None
+
+    def show_exif_info(self, event):
+        """显示文件的 EXIF 信息，如果文件已经被重命名，则使用新文件的路径"""
+        item = self.files_tree.identify_row(event.y)
+        if item:
+            file_path = self.files_tree.item(item, 'values')[0]
+            # 如果文件已经被重命名，则使用新文件的路径
+            if file_path in original_to_new_mapping:
+                file_path = original_to_new_mapping[file_path]
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            exif_info = self.extract_exif_info(file_path, exif_data)
+            self.create_tooltip(event.widget, exif_info)
+
+    def extract_exif_info(self, file_path, exif_data):
+        """提取 EXIF 信息并生成字符串"""
+        exif_info = ""
+
+        # 新名称
+        new_name = self.generate_new_name(file_path, exif_data)
+        exif_info += f"新名称: {new_name}\n"
+
+        # 修改日期
+        mod_date = self.get_file_modification_date(file_path)
+        if mod_date:
+            exif_info += f"修改日期: {mod_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+        # 创建日期
+        create_date = self.get_file_creation_date(file_path)
+        if create_date:
+            exif_info += f"创建日期: {create_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+        # 如果存在 EXIF 信息，则显示更多详细信息
+        if exif_data:
+            # 拍摄日期
+            if 'DateTimeOriginalParsed' in exif_data:
+                exif_info += f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+
+            # 设备
+            if 'Model' in exif_data:
+                exif_info += f"设备: {exif_data['Model']}\n"
+
+            # 镜头
+            if 'LensModel' in exif_data:
+                exif_info += f"镜头: {exif_data['LensModel']}\n"
+
+            # ISO
+            if 'ISOSpeedRatings' in exif_data:
+                exif_info += f"ISO: {exif_data['ISOSpeedRatings']}\n"
+
+            # 光圈
+            if 'FNumber' in exif_data:
+                exif_info += f"光圈: f/{exif_data['FNumber']}\n"
+
+            # 快门速度
+            if 'ExposureTime' in exif_data:
+                exif_info += f"快门速度: {exif_data['ExposureTime']} 秒\n"
+
+            # 分辨率
+            if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
+                exif_info += f"分辨率: {exif_data['ImageWidth']}x{exif_data['ImageHeight']}\n"
+
+        return exif_info
 
     def get_file_modification_date(self, file_path):
         try:
@@ -637,20 +765,6 @@ class PhotoRenamer:
         self.update_status_bar("all_files_restored")
         self.undo_button.config(state=ttk.DISABLED)
 
-    def on_drop(self, event):
-        paths = re.findall(r'(?<=\{)[^{}]*(?=\})|[^{}\s]+', event.data)
-        for path in paths:
-            path = path.strip().strip('{}')
-            if os.path.isfile(path):
-                if not any(path == item[0] for item in self.files_tree.get_children()):
-                    self.files_tree.insert('', 'end', values=(path, '待处理'))
-            elif os.path.isdir(path):
-                for root, _, files in os.walk(path):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        if not any(file_path == item[0] for item in self.files_tree.get_children()):
-                            self.files_tree.insert('', 'end', values=(file_path, '待处理'))
-
     def remove_file(self, event):
         selected_items = self.files_tree.selection()
         for item in selected_items:
@@ -667,65 +781,8 @@ class PhotoRenamer:
         for file_path in file_paths:
             self.files_tree.insert('', 'end', values=(file_path, '待处理'))
 
-    def show_exif_info(self, event):
-        item = self.files_tree.identify_row(event.y)
-        if item:
-            file_path = self.files_tree.item(item, 'values')[0]
-            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            exif_info = self.extract_exif_info(file_path, exif_data)
-            self.create_tooltip(event.widget, exif_info)
-
-    def extract_exif_info(self, file_path, exif_data):
-        exif_info = ""
-
-        # 新名称
-        new_name = self.generate_new_name(file_path, exif_data)
-        exif_info += f"新名称: {new_name}\n"
-
-        # 修改日期
-        mod_date = self.get_file_modification_date(file_path)
-        if mod_date:
-            exif_info += f"修改日期: {mod_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-        # 创建日期
-        create_date = self.get_file_creation_date(file_path)
-        if create_date:
-            exif_info += f"创建日期: {create_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-        # 如果存在EXIF信息，则显示更多详细信息
-        if exif_data:
-            # 拍摄日期
-            if 'DateTimeOriginalParsed' in exif_data:
-                exif_info += f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-            # 设备
-            if 'Model' in exif_data:
-                exif_info += f"设备: {exif_data['Model']}\n"
-
-            # 镜头
-            if 'LensModel' in exif_data:
-                exif_info += f"镜头: {exif_data['LensModel']}\n"
-
-            # ISO
-            if 'ISOSpeedRatings' in exif_data:
-                exif_info += f"ISO: {exif_data['ISOSpeedRatings']}\n"
-
-            # 光圈
-            if 'FNumber' in exif_data:
-                exif_info += f"光圈: f/{exif_data['FNumber']}\n"
-
-            # 快门速度
-            if 'ExposureTime' in exif_data:
-                exif_info += f"快门速度: {exif_data['ExposureTime']} 秒\n"
-
-            # 分辨率
-            if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
-                exif_info += f"分辨率: {exif_data['ImageWidth']}x{exif_data['ImageHeight']}\n"
-
-        return exif_info
-
     def update_new_name_preview(self):
-        # 更新新名称的预览
+        # 更新新名称的预览，但不要立即更新列表中的文件名
         selected_item = self.files_tree.selection()
         if selected_item:
             file_path = self.files_tree.item(selected_item, 'values')[0]
@@ -819,6 +876,50 @@ class PhotoRenamer:
 
     def open_update_link(self):
         webbrowser.open("https://github.com/Qwejay/QphotoRenamer")
+
+    def detect_file_status(self, file_path):
+        filename = os.path.basename(file_path)
+        status = "待处理"
+
+        # 检测拍摄日期
+        exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+        if exif_data and 'DateTimeOriginalParsed' in exif_data:
+            shot_date = exif_data['DateTimeOriginalParsed']
+            base_name = shot_date.strftime(DATE_FORMAT)
+            if filename.startswith(base_name):
+                status = f"已根据拍摄日期重命名"
+                return status
+
+        # 检测修改日期
+        mod_date = self.get_file_modification_date(file_path)
+        if mod_date:
+            base_name = mod_date.strftime(DATE_FORMAT)
+            if filename.startswith(base_name):
+                status = f"已根据修改日期重命名"
+                return status
+
+        # 检测创建日期
+        create_date = self.get_file_creation_date(file_path)
+        if create_date:
+            base_name = create_date.strftime(DATE_FORMAT)
+            if filename.startswith(base_name):
+                status = f"已根据创建日期重命名"
+                return status
+
+        return status
+
+    def update_new_name_preview(self):
+        # 更新新名称的预览，并重新检测文件状态
+        selected_item = self.files_tree.selection()
+        if selected_item:
+            file_path = self.files_tree.item(selected_item, 'values')[0]
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            new_name = self.generate_new_name(file_path, exif_data)
+            self.status_bar.config(text=f"新名称预览: {new_name}")
+
+            # 重新检测文件状态
+            status = self.detect_file_status(file_path)
+            self.files_tree.set(selected_item, 'status', status)
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
