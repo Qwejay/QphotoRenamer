@@ -4,9 +4,10 @@ QphotoRenamer 是一个批量重命名工具，支持所有文件格式，如果
 
 ## 功能特性
 
-- 自动根据EXIF判断文件并重命名。
-- 多线程批量重命名文件。
-- 程序简洁易用。
+- 自动根据照片的拍摄日期和视频文件的媒体创建日期对文件重命名
+- 非媒体文件支持通过文件的修改日期和创建日期重命名
+- 自定义重命名格式、可添加命名前缀和后缀
+- 程序美观简洁易用
 
 ![image](https://github.com/user-attachments/assets/23af7394-725e-41ba-b416-737c47f231e8)
 ![image](https://github.com/user-attachments/assets/48b9365a-c6b3-426a-9fe1-57f08d71f548)
