@@ -14,6 +14,7 @@ import json
 import locale
 import subprocess
 import webbrowser
+import subprocess
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -39,9 +40,9 @@ COMMON_DATE_FORMATS = [
 
 LANGUAGES = {
     "简体中文": {
-        "window_title": "文件&照片批量重命名 QphotoRenamer 1.0.7 —— QwejayHuang",
+        "window_title": "文件&照片批量重命名 QphotoRenamer 1.0.8 —— QwejayHuang",
         "description_base": "拖动文件&照片，即将按照",
-        "description_suffix": "重命名文件，如无拍摄日期(或者不是图片)，则使用",
+        "description_suffix": "重命名文件，如无拍摄日期(或者不是媒体文件)，则使用",
         "start_renaming": "开始重命名",
         "undo_renaming": "撤销重命名",
         "stop_renaming": "停止重命名",
@@ -91,7 +92,7 @@ LANGUAGES = {
         ]
     },
     "English": {
-        "window_title": "QphotoRenamer 1.0.7 —— QwejayHuang",
+        "window_title": "QphotoRenamer 1.0.8 —— QwejayHuang",
         "description_base": "Drag and drop photos to begin renaming by ",
         "description_suffix": ",If the shooting date cannot be found, use",
         "start_renaming": "Start",
@@ -151,7 +152,7 @@ ALTERNATE_DATE_BASIS = "modification"
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.7 —— QwejayHuang")
+        self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.8 —— QwejayHuang")
         self.root.geometry("800x600")
         self.root.iconbitmap(icon_path)
 
@@ -543,17 +544,31 @@ class PhotoRenamer:
 
         date_basis = self.date_basis_var.get()
         if date_basis == "拍摄日期":
-            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            shot_date = exif_data.get('DateTimeOriginalParsed') if exif_data else None
-            if not shot_date:
-                if self.alternate_date_var.get() == "修改日期":
-                    shot_date = self.get_file_modification_date(file_path)
-                elif self.alternate_date_var.get() == "创建日期":
-                    shot_date = self.get_file_creation_date(file_path)
-                elif self.alternate_date_var.get() == "保留原名":
-                    self.files_tree.set(item, 'status', '保留原名')
-                    unrenamed_files += 1
-                    return False
+            if file_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
+                # 如果是视频文件，获取媒体创建日期
+                shot_date = self.get_video_creation_date(file_path)
+                if not shot_date:
+                    if self.alternate_date_var.get() == "修改日期":
+                        shot_date = self.get_file_modification_date(file_path)
+                    elif self.alternate_date_var.get() == "创建日期":
+                        shot_date = self.get_file_creation_date(file_path)
+                    elif self.alternate_date_var.get() == "保留原名":
+                        self.files_tree.set(item, 'status', '保留原名')
+                        unrenamed_files += 1
+                        return False
+            else:
+                # 如果是图片文件，获取EXIF信息
+                exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+                shot_date = exif_data.get('DateTimeOriginalParsed') if exif_data else None
+                if not shot_date:
+                    if self.alternate_date_var.get() == "修改日期":
+                        shot_date = self.get_file_modification_date(file_path)
+                    elif self.alternate_date_var.get() == "创建日期":
+                        shot_date = self.get_file_creation_date(file_path)
+                    elif self.alternate_date_var.get() == "保留原名":
+                        self.files_tree.set(item, 'status', '保留原名')
+                        unrenamed_files += 1
+                        return False
         elif date_basis == "修改日期":
             shot_date = self.get_file_modification_date(file_path)
         elif date_basis == "创建日期":
@@ -933,6 +948,22 @@ class PhotoRenamer:
             # 重新检测文件状态
             status = self.detect_file_status(file_path)
             self.files_tree.set(selected_item, 'status', status)
+
+    def get_video_creation_date(self, file_path):
+        """获取视频文件的媒体创建日期"""
+        try:
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-show_entries', 'format_tags=creation_time',
+                '-of', 'default=noprint_wrappers=1:nokey=1', file_path
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                creation_time = result.stdout.strip()
+                if creation_time:
+                    return datetime.datetime.strptime(creation_time, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except Exception as e:
+            logging.error(f"获取视频文件创建日期失败: {file_path}, 错误: {e}")
+        return None
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
