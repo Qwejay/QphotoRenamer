@@ -60,6 +60,8 @@ LANGUAGES = {
         "renaming_stopped": "重命名操作已停止。",
         "renaming_success": "成功重命名 {0} 个文件，未重命名 {1} 个文件。",
         "all_files_restored": "所有文件已恢复到原始名称。",
+        "filename": "文件名",
+        "status": "状态",
         "help_text": "使用说明:\n\
 1. 拖拽文件或文件夹到列表中，或点击“添加文件”按钮选择文件。\n\
 2. 点击“开始重命名”按钮，程序将根据设置的日期格式重命名文件。\n\
@@ -110,6 +112,8 @@ LANGUAGES = {
         "renaming_stopped": "Renaming operation has been stopped.",
         "renaming_success": "Successfully renamed {0} files, {1} files not renamed.",
         "all_files_restored": "All files have been restored to their original names.",
+        "filename": "Filename",
+        "status": "Status",
         "help_text": "Usage Instructions:\n\
 1. Drag files or folders into the list or click the 'Add Files' button to select files.\n\
 2. Click the 'Start' button to begin renaming files.\n\
@@ -200,8 +204,8 @@ class PhotoRenamer:
         # 使用 Treeview
         columns = ('filename', 'status')
         self.files_tree = ttk.Treeview(main_frame, columns=columns, show='headings')
-        self.files_tree.heading('filename', text='文件名')
-        self.files_tree.heading('status', text='状态')
+        self.files_tree.heading('filename', text=self.lang["filename"])
+        self.files_tree.heading('status', text=self.lang["status"])
 
         # 设置 status 列居中对齐，并设置最小宽度
         self.files_tree.column('status', anchor='center', width=100, minwidth=100)  # 最小宽度为100
@@ -383,6 +387,10 @@ class PhotoRenamer:
             
             # 更新状态栏文本
             self.status_bar.config(text=self.lang["ready"])
+            
+            # 更新 Treeview 的列标题
+            self.files_tree.heading('filename', text=self.lang["filename"])
+            self.files_tree.heading('status', text=self.lang["status"])
 
     def save_settings(self, date_format, language, prefix, suffix, skip_extensions_input, settings_window):
         global DATE_FORMAT, SKIP_EXTENSIONS
