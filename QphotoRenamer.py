@@ -430,6 +430,7 @@ class PhotoRenamer:
         date_format_var = ttk.StringVar(value=DATE_FORMAT)
         date_format_combobox = ttk.Combobox(settings_frame, textvariable=date_format_var, values=COMMON_DATE_FORMATS, state="readonly")
         date_format_combobox.grid(row=0, column=1, padx=10, pady=10)
+        date_format_combobox.set(DATE_FORMAT)
 
         ttk.Label(settings_frame, text=self.lang["language"], anchor='w').grid(row=1, column=0, padx=10, pady=10)
         language_combobox = ttk.Combobox(settings_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
