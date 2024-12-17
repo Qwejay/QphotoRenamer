@@ -14,7 +14,6 @@ import json
 import locale
 import subprocess
 import webbrowser
-import subprocess
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -61,8 +60,9 @@ LANGUAGES = {
         "renaming_stopped": "重命名操作已停止。",
         "renaming_success": "成功重命名 {0} 个文件，未重命名 {1} 个文件。",
         "all_files_restored": "所有文件已恢复到原始名称。",
-        "filename": "文件名",
+        "filename": "文件路径",
         "status": "状态",
+        "renamed_name": "新名称",
         "help_text": "使用说明:\n\
 1. 拖拽文件或文件夹到列表中，或点击“添加文件”按钮选择文件。\n\
 2. 点击“开始重命名”按钮，程序将根据设置的日期格式重命名文件。\n\
@@ -115,6 +115,7 @@ LANGUAGES = {
         "all_files_restored": "All files have been restored to their original names.",
         "filename": "Filename",
         "status": "Status",
+        "renamed_name": "Renamed Name",
         "help_text": "Usage Instructions:\n\
 1. Drag files or folders into the list or click the 'Add Files' button to select files.\n\
 2. Click the 'Start' button to begin renaming files.\n\
@@ -153,7 +154,7 @@ class PhotoRenamer:
     def __init__(self, root):
         self.root = root
         self.root.title("文件&照片批量重命名 QphotoRenamer 1.0.8 —— QwejayHuang")
-        self.root.geometry("800x600")
+        self.root.geometry("900x600")
         self.root.iconbitmap(icon_path)
 
         self.style = ttk.Style('litera')
@@ -199,20 +200,22 @@ class PhotoRenamer:
         self.alternate_date_combobox.pack(side=ttk.LEFT)
 
         # 在初始化UI时绑定下拉框的选项变化事件
-        self.date_basis_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_new_name_preview())
-        self.alternate_date_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_new_name_preview())
+        self.date_basis_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_renamed_name_column())
+        self.alternate_date_combobox.bind('<<ComboboxSelected>>', lambda event: self.update_renamed_name_column())
 
-        # 使用 Treeview
-        columns = ('filename', 'status')
+        # 列表排序
+        columns = ('filename', 'renamed_name', 'status')
+
         self.files_tree = ttk.Treeview(main_frame, columns=columns, show='headings')
-        self.files_tree.heading('filename', text=self.lang["filename"])
-        self.files_tree.heading('status', text=self.lang["status"])
+        # 设置列标题
+        self.files_tree.heading('filename', text=self.lang["filename"], anchor='w')
+        self.files_tree.heading('renamed_name', text=self.lang["renamed_name"], anchor='w')
+        self.files_tree.heading('status', text=self.lang["status"], anchor='w')
 
-        # 设置 status 列居中对齐，并设置最小宽度
-        self.files_tree.column('status', anchor='center', width=100, minwidth=100)  # 最小宽度为100
-
-        # 设置 filename 列自动调整宽度
-        self.files_tree.column('filename', stretch=True, width=500)  # 初始宽度为500
+        # 设置列宽度
+        self.files_tree.column('filename', anchor='w', stretch=True, width=400)
+        self.files_tree.column('renamed_name', anchor='w', stretch=True, width=200)
+        self.files_tree.column('status', anchor='w', width=100, minwidth=100)
 
         self.files_tree.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
         self.files_tree.drop_target_register(DND_FILES)
@@ -273,12 +276,22 @@ class PhotoRenamer:
         self.update_link = ttk.Label(button_frame, text=self.lang.get("check_for_updates", "反馈&检查更新"), foreground="blue", cursor="hand2")
         self.update_link.pack(side=ttk.RIGHT, padx=5)
         self.update_link.bind("<Button-1>", lambda e: self.open_update_link())
-        self.update_link.text_key = "check_for_updates" 
+        self.update_link.text_key = "check_for_updates"
 
         # 状态栏
         self.status_bar = ttk.Label(self.root, text=self.lang["ready"], relief=ttk.SUNKEN, anchor=ttk.W)
         self.status_bar.pack(side=ttk.BOTTOM, fill=ttk.X)
         self.status_bar.text_key = "ready"
+
+    def select_files(self):
+        file_paths = filedialog.askopenfilenames()
+        for file_path in file_paths:
+            if any(file_path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
+                logging.info(f"跳过重复添加的文件: {file_path}")
+                continue
+            status = self.detect_file_status(file_path)
+            self.files_tree.insert('', 'end', values=(file_path, '', status))  # 初始化 renamed_name 列为空
+            self.update_renamed_name_column()  # 更新名称预览列
 
     def on_drop(self, event):
         paths = re.findall(r'(?<=\{)[^{}]*(?=\})|[^{}\s]+', event.data)
@@ -286,31 +299,24 @@ class PhotoRenamer:
             path = path.strip().strip('{}')
             if os.path.isfile(path):
                 if not any(path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
-                    # 检测文件的拍摄日期、创建日期和修改日期
                     status = self.detect_file_status(path)
-                    self.files_tree.insert('', 'end', values=(path, status))
-                    self.adjust_treeview_column_width()  # 调整列宽
+                    self.files_tree.insert('', 'end', values=(path, '', status))
+                    self.update_renamed_name_column()
             elif os.path.isdir(path):
                 for root, _, files in os.walk(path):
                     for file in files:
                         file_path = os.path.join(root, file)
                         if not any(file_path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
-                            # 检测文件的拍摄日期、创建日期和修改日期
                             status = self.detect_file_status(file_path)
-                            self.files_tree.insert('', 'end', values=(file_path, status))
-                            self.adjust_treeview_column_width()  # 调整列宽
+                            self.files_tree.insert('', 'end', values=(file_path, '', status))
+                            self.update_renamed_name_column()
 
-    def adjust_treeview_column_width(self):
-        """根据文件名的长度调整 Treeview 的列宽"""
-        max_width = 500  # 初始宽度
+    def update_renamed_name_column(self):
         for item in self.files_tree.get_children():
-            filename = self.files_tree.item(item, 'values')[0]
-            filename_length = len(filename)
-            if filename_length * 10 > max_width:  # 假设每个字符大约占用10像素
-                max_width = filename_length * 10
-
-        # 设置 filename 列的宽度
-        self.files_tree.column('filename', width=max_width)
+            file_path = self.files_tree.item(item, 'values')[0]
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            new_name = self.generate_new_name(file_path, exif_data)
+            self.files_tree.set(item, 'renamed_name', new_name)  # 更新 renamed_name 列
 
     def load_settings(self):
         global DATE_FORMAT, SKIP_EXTENSIONS
@@ -343,20 +349,20 @@ class PhotoRenamer:
         if language in LANGUAGES:
             self.lang = LANGUAGES[language]
             self.root.title(self.lang["window_title"])
-            
+
             # 更新带有 text_key 属性的控件的文本
             def update_widget_text(widget):
                 if hasattr(widget, 'text_key') and widget.text_key in self.lang:
                     widget.config(text=self.lang[widget.text_key])
-            
+
             # 递归遍历控件树并更新文本
             def traverse_widgets(widget):
                 update_widget_text(widget)
                 for child in widget.winfo_children():
                     traverse_widgets(child)
-            
+
             traverse_widgets(self.root)
-            
+
             # 更新下拉框的选项和显示值
             if hasattr(self, 'date_basis_combobox'):
                 self.date_basis_combobox['values'] = [item['display'] for item in self.lang["date_bases"]]
@@ -371,7 +377,7 @@ class PhotoRenamer:
                                 break
                 else:
                     self.date_basis_combobox.set(self.lang["date_bases"][0]['display'])
-            
+
             if hasattr(self, 'alternate_date_combobox'):
                 self.alternate_date_combobox['values'] = [item['display'] for item in self.lang["alternate_dates"]]
                 # 根据配置文件中的内部值设置显示值
@@ -385,13 +391,14 @@ class PhotoRenamer:
                                 break
                 else:
                     self.alternate_date_combobox.set(self.lang["alternate_dates"][0]['display'])
-            
+
             # 更新状态栏文本
             self.status_bar.config(text=self.lang["ready"])
-            
+
             # 更新 Treeview 的列标题
             self.files_tree.heading('filename', text=self.lang["filename"])
             self.files_tree.heading('status', text=self.lang["status"])
+            self.files_tree.heading('renamed_name', text=self.lang["renamed_name"])
 
     def save_settings(self, date_format, language, prefix, suffix, skip_extensions_input, settings_window):
         global DATE_FORMAT, SKIP_EXTENSIONS
@@ -416,6 +423,7 @@ class PhotoRenamer:
         with open("QphotoRenamer.ini", "w") as f:
             json.dump(config, f)
         self.set_language(language)
+        self.update_renamed_name_column()
         self.update_status_bar("save_settings")
         settings_window.destroy()
 
@@ -798,27 +806,6 @@ class PhotoRenamer:
     def clear_file_list(self):
         self.files_tree.delete(*self.files_tree.get_children())
 
-    def select_files(self):
-        file_paths = filedialog.askopenfilenames()
-        for file_path in file_paths:
-            # 检查文件是否已经存在于文件列表中
-            if any(file_path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
-                logging.info(f"跳过重复添加的文件: {file_path}")
-                continue  # 如果文件已经存在，跳过添加
-
-            status = self.detect_file_status(file_path)
-            self.files_tree.insert('', 'end', values=(file_path, status))
-            self.adjust_treeview_column_width()  # 调整列宽
-
-    def update_new_name_preview(self):
-        # 更新新名称的预览，但不要立即更新列表中的文件名
-        selected_item = self.files_tree.selection()
-        if selected_item:
-            file_path = self.files_tree.item(selected_item, 'values')[0]
-            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            new_name = self.generate_new_name(file_path, exif_data)
-            self.status_bar.config(text=f"新名称预览: {new_name}")
-
     def generate_new_name(self, file_path, exif_data):
         # 根据用户选择的日期格式或备用日期生成新名称
         if self.date_basis_var.get() == "拍摄日期":
@@ -908,7 +895,7 @@ class PhotoRenamer:
 
     def detect_file_status(self, file_path):
         filename = os.path.basename(file_path)
-        status = "检测：待处理"
+        status = "待重命名"
 
         # 检测拍摄日期
         exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
@@ -916,7 +903,7 @@ class PhotoRenamer:
             shot_date = exif_data['DateTimeOriginalParsed']
             base_name = shot_date.strftime(DATE_FORMAT)
             if filename.startswith(base_name):
-                status = f"检测：拍摄日期命名"
+                status = f"已按拍摄日期命名"
                 return status
 
         # 检测修改日期
@@ -924,7 +911,7 @@ class PhotoRenamer:
         if mod_date:
             base_name = mod_date.strftime(DATE_FORMAT)
             if filename.startswith(base_name):
-                status = f"检测：修改日期命名"
+                status = f"已按修改日期命名"
                 return status
 
         # 检测创建日期
@@ -932,23 +919,10 @@ class PhotoRenamer:
         if create_date:
             base_name = create_date.strftime(DATE_FORMAT)
             if filename.startswith(base_name):
-                status = f"检测：创建日期命名"
+                status = f"已按创建日期命名"
                 return status
 
         return status
-
-    def update_new_name_preview(self):
-        # 更新新名称的预览，并重新检测文件状态
-        selected_item = self.files_tree.selection()
-        if selected_item:
-            file_path = self.files_tree.item(selected_item, 'values')[0]
-            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            new_name = self.generate_new_name(file_path, exif_data)
-            self.status_bar.config(text=f"新名称预览: {new_name}")
-
-            # 重新检测文件状态
-            status = self.detect_file_status(file_path)
-            self.files_tree.set(selected_item, 'status', status)
 
     def get_video_creation_date(self, file_path):
         """获取视频文件的媒体创建日期"""
