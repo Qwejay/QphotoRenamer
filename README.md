@@ -1,6 +1,6 @@
 # QphotoRenamer
 
-QphotoRenamer 是一个批量重命名工具，支持所有文件格式，如果是图片文件会根据拍摄日期重命名图片。该工具使用Python编写，并使用Tkinter构建用户界面。
+QphotoRenamer 是一个批量重命名工具，支持所有文件格式，会根据照片或视频的拍摄日期重命名图片。该工具使用Python编写，并使用Tkinter构建用户界面。
 
 ## 功能特性
 
