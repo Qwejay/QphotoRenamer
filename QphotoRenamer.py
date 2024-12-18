@@ -11,7 +11,6 @@ from threading import Thread, Event
 import logging
 import re
 import json
-import locale
 import subprocess
 import webbrowser
 
@@ -63,6 +62,10 @@ LANGUAGES = {
         "filename": "文件路径",
         "status": "状态",
         "renamed_name": "新名称",
+        "prepare_rename_by": "准备以 {} 重命名",
+        "prepare_rename_keep_name": "准备保留原名",
+        "already_rename_by": "已按 {} 命名",
+        "ready_to_rename": "待重命名",
         "help_text": "使用说明:\n\
 1. 拖拽文件或文件夹到列表中，或点击“添加文件”按钮选择文件。\n\
 2. 点击“开始重命名”按钮，程序将根据设置的日期格式重命名文件。\n\
@@ -103,7 +106,7 @@ LANGUAGES = {
         "add_files": "Add Files",
         "help": "Help",
         "auto_scroll": "Auto Scroll",
-        "check_for_updates": "Check for Updates",
+        "check_for_updates": "Feedback&Check Updates",
         "ready": "Ready",
         "rename_pattern": "Rename Pattern:",
         "language": "Language",
@@ -116,6 +119,10 @@ LANGUAGES = {
         "filename": "Filename",
         "status": "Status",
         "renamed_name": "Renamed Name",
+        "prepare_rename_by": "Ready to rename by {}",
+        "prepare_rename_keep_name": "Ready to keep original name",
+        "already_rename_by": "Already renamed by {}",
+        "ready_to_rename": "Ready to rename",
         "help_text": "Usage Instructions:\n\
 1. Drag files or folders into the list or click the 'Add Files' button to select files.\n\
 2. Click the 'Start' button to begin renaming files.\n\
@@ -312,11 +319,17 @@ class PhotoRenamer:
                             self.update_renamed_name_column()
 
     def update_renamed_name_column(self):
+        # 清除所有项的背景颜色
+        for item in self.files_tree.get_children():
+            self.files_tree.item(item, tags=())  # 清除所有标签
+
         for item in self.files_tree.get_children():
             file_path = self.files_tree.item(item, 'values')[0]
             exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
             new_name = self.generate_new_name(file_path, exif_data)
-            self.files_tree.set(item, 'renamed_name', new_name)  # 更新 renamed_name 列
+            status = self.detect_file_status(file_path)
+            self.files_tree.set(item, 'renamed_name', new_name)
+            self.files_tree.set(item, 'status', status)
 
     def load_settings(self):
         global DATE_FORMAT, SKIP_EXTENSIONS
@@ -687,6 +700,28 @@ class PhotoRenamer:
             logging.error(f"读取HEIC数据失败: {file_path}, 错误: {e}")
         return None
 
+    def create_tooltip(self, widget, exif_info):
+        if hasattr(widget, 'tooltip_window') and widget.tooltip_window:
+            widget.tooltip_window.destroy()
+        
+        # 创建提示框
+        tooltip = Toplevel(widget)
+        tooltip.wm_overrideredirect(True)
+        x = widget.winfo_pointerx() + 10
+        y = widget.winfo_pointery() + 10
+        tooltip.geometry(f"+{x}+{y}")
+        label = Label(tooltip, text=exif_info, background="lightyellow", relief="solid", borderwidth=1, anchor='w', justify='left')
+        label.pack(fill='both', expand=True)
+        widget.tooltip_window = tooltip
+
+        # 设置提示框在10秒后自动销毁
+        def destroy_tooltip():
+            if hasattr(widget, 'tooltip_window') and widget.tooltip_window:
+                widget.tooltip_window.destroy()
+                widget.tooltip_window = None
+
+        widget.after(10000, destroy_tooltip)
+
     def show_exif_info(self, event):
         """显示文件的 EXIF 信息，如果文件已经被重命名，则使用新文件的路径"""
         item = self.files_tree.identify_row(event.y)
@@ -695,9 +730,15 @@ class PhotoRenamer:
             # 如果文件已经被重命名，则使用新文件的路径
             if file_path in original_to_new_mapping:
                 file_path = original_to_new_mapping[file_path]
-            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-            exif_info = self.extract_exif_info(file_path, exif_data)
-            self.create_tooltip(event.widget, exif_info)
+            
+            # 使用 after 方法延迟显示提示框
+            self.root.after(100, self.delayed_show_exif_info, file_path, event.widget)
+
+    def delayed_show_exif_info(self, file_path, widget):
+        """延迟显示 EXIF 信息"""
+        exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+        exif_info = self.extract_exif_info(file_path, exif_data)
+        self.create_tooltip(widget, exif_info)
 
     def extract_exif_info(self, file_path, exif_data):
         """提取 EXIF 信息并生成字符串"""
@@ -846,17 +887,6 @@ class PhotoRenamer:
         new_name = f"{prefix}{base_name}{suffix}{ext}"
         return new_name
 
-    def create_tooltip(self, widget, exif_info):
-        if hasattr(widget, 'tooltip_window') and widget.tooltip_window:
-            widget.tooltip_window.destroy()
-        tooltip = Toplevel(widget)
-        tooltip.wm_overrideredirect(True)
-        x = widget.winfo_pointerx() + 10
-        y = widget.winfo_pointery() + 10
-        tooltip.geometry(f"+{x}+{y}")
-        Label(tooltip, text=exif_info, background="lightyellow", relief="solid", borderwidth=1, anchor='w', justify='left').pack(fill='both', expand=True)
-        widget.tooltip_window = tooltip
-
     def open_file(self, event):
         item = self.files_tree.identify_row(event.y)
         if item:
@@ -895,32 +925,69 @@ class PhotoRenamer:
 
     def detect_file_status(self, file_path):
         filename = os.path.basename(file_path)
-        status = "待重命名"
+        status = ""
 
-        # 检测拍摄日期
-        exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-        if exif_data and 'DateTimeOriginalParsed' in exif_data:
-            shot_date = exif_data['DateTimeOriginalParsed']
-            base_name = shot_date.strftime(DATE_FORMAT)
-            if filename.startswith(base_name):
-                status = f"已按拍摄日期命名"
-                return status
+        date_basis_display = self.date_basis_var.get()
+        alternate_date_display = self.alternate_date_var.get()
 
-        # 检测修改日期
-        mod_date = self.get_file_modification_date(file_path)
-        if mod_date:
-            base_name = mod_date.strftime(DATE_FORMAT)
-            if filename.startswith(base_name):
-                status = f"已按修改日期命名"
-                return status
+        if date_basis_display == "拍摄日期":
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            if exif_data and 'DateTimeOriginalParsed' in exif_data:
+                status = self.lang["prepare_rename_by"].format("拍摄日期")
+            else:
+                if alternate_date_display == "修改日期":
+                    mod_date = self.get_file_modification_date(file_path)
+                    if mod_date:
+                        status = self.lang["prepare_rename_by"].format("修改日期")
+                    else:
+                        status = self.lang["prepare_rename_keep_name"]
+                elif alternate_date_display == "创建日期":
+                    create_date = self.get_file_creation_date(file_path)
+                    if create_date:
+                        status = self.lang["prepare_rename_by"].format("创建日期")
+                    else:
+                        status = self.lang["prepare_rename_keep_name"]
+                elif alternate_date_display == "保留原名":
+                    status = self.lang["prepare_rename_keep_name"]
+        elif date_basis_display == "修改日期":
+            mod_date = self.get_file_modification_date(file_path)
+            if mod_date:
+                status = self.lang["prepare_rename_by"].format("修改日期")
+            else:
+                status = self.lang["prepare_rename_keep_name"]
+        elif date_basis_display == "创建日期":
+            create_date = self.get_file_creation_date(file_path)
+            if create_date:
+                status = self.lang["prepare_rename_by"].format("创建日期")
+            else:
+                status = self.lang["prepare_rename_keep_name"]
 
-        # 检测创建日期
-        create_date = self.get_file_creation_date(file_path)
-        if create_date:
-            base_name = create_date.strftime(DATE_FORMAT)
-            if filename.startswith(base_name):
-                status = f"已按创建日期命名"
-                return status
+        # 如果文件名已经符合命名规则，则显示已按相应的日期命名
+        if not status:
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            if exif_data and 'DateTimeOriginalParsed' in exif_data:
+                shot_date = exif_data['DateTimeOriginalParsed']
+                base_name = shot_date.strftime(DATE_FORMAT)
+                if filename.startswith(base_name):
+                    status = self.lang["already_rename_by"].format("拍摄日期")
+                    return status
+
+            mod_date = self.get_file_modification_date(file_path)
+            if mod_date:
+                base_name = mod_date.strftime(DATE_FORMAT)
+                if filename.startswith(base_name):
+                    status = self.lang["already_rename_by"].format("修改日期")
+                    return status
+
+            create_date = self.get_file_creation_date(file_path)
+            if create_date:
+                base_name = create_date.strftime(DATE_FORMAT)
+                if filename.startswith(base_name):
+                    status = self.lang["already_rename_by"].format("创建日期")
+                    return status
+
+        if not status:
+            status = self.lang["ready_to_rename"]
 
         return status
 
