@@ -409,7 +409,8 @@ class PhotoRenamer:
                 self.language_var.set(config.get("language", "简体中文"))
                 self.prefix_var.set(config.get("prefix", ""))
                 self.suffix_var.set(config.get("suffix", ""))
-                self.skip_extensions_var.set(" ".join(config.get("skip_extensions", [])))
+                # 去掉扩展名前的点号显示
+                self.skip_extensions_var.set(" ".join(ext[1:] for ext in config.get("skip_extensions", [])))
                 self.file_threshold_var.set(config.get("fast_add_mode_threshold", 50))  # 加载文件数量阈值，默认值为50
                 self.name_conflict_var.set(config.get("name_conflict", "add_suffix"))  # 默认选项为增加后缀
                 # 先设置语言
@@ -490,13 +491,8 @@ class PhotoRenamer:
         global DATE_FORMAT, SKIP_EXTENSIONS
         DATE_FORMAT = date_format
         skip_ext_input = skip_extensions_input.strip().lower()
-        SKIP_EXTENSIONS = [ext for ext in skip_ext_input.split() if ext.startswith('.')]
-        if not all(ext.startswith('.') for ext in SKIP_EXTENSIONS):
-            messagebox.showerror("错误", "跳过重命名的扩展名必须以点号开头，例如 .jpg")
-            return
-        # 获取内部值
-        date_basis_internal = next(item['value'] for item in self.lang["date_bases"] if item['display'] == self.date_basis_var.get())
-        alternate_date_basis_internal = next(item['value'] for item in self.lang["alternate_dates"] if item['display'] == self.alternate_date_var.get())
+        SKIP_EXTENSIONS = ['.' + ext for ext in skip_ext_input.split()]
+
         # 保存文件数量阈值
         try:
             file_threshold = int(self.file_threshold_var.get())
@@ -505,16 +501,16 @@ class PhotoRenamer:
         except ValueError as e:
             messagebox.showerror("错误", "文件数量阈值必须为正整数")
             return
-
+        
         config = {
             "date_format": DATE_FORMAT,
             "language": language,
             "prefix": prefix,
             "suffix": suffix,
             "skip_extensions": SKIP_EXTENSIONS,
-            "date_basis": date_basis_internal,
-            "alternate_date_basis": alternate_date_basis_internal,
-            "fast_add_mode_threshold": file_threshold,  # 保存文件数量阈值
+            "date_basis": next(item['value'] for item in self.lang["date_bases"] if item['display'] == self.date_basis_var.get()),
+            "alternate_date_basis": next(item['value'] for item in self.lang["alternate_dates"] if item['display'] == self.alternate_date_var.get()),
+            "fast_add_mode_threshold": self.file_threshold_var.get(),  # 保存文件数量阈值
             "name_conflict": self.name_conflict_var.get()  # 保存文件名冲突处理方式
         }
         with open("QphotoRenamer.ini", "w") as f:
@@ -669,8 +665,12 @@ class PhotoRenamer:
         if file_path in original_to_new_mapping:
             return False
 
-        if filename.lower().endswith(tuple(SKIP_EXTENSIONS)):
-            logging.info(f"跳过文件: {filename}")
+        # 检查文件类型是否在跳过列表中
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in SKIP_EXTENSIONS:
+            logging.info(f"跳过文件: {filename}，文件类型被跳过")
+            self.files_tree.set(item, 'status', '此文件类型被跳过')
+            unrenamed_files += 1
             return False
 
         date_basis = self.date_basis_var.get()
