@@ -53,8 +53,8 @@ jobs:
             const response = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: 'v2.1',
-              name: 'Release v2.1',
+              tag_name: 'latest',
+              name: 'Release latest',
               draft: false,
               prerelease: false,
             });
@@ -65,7 +65,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.result }}
+          upload_url: ${{ fromJSON(steps.create_release.outputs.result) }}
           asset_path: dist/QphotoRenamer.exe
           asset_name: QphotoRenamer.exe
           asset_content_type: application/octet-stream
