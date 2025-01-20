@@ -37,7 +37,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --windowed --icon=logo.ico --add-data "QphotoRenamer.ini;." --add-data "logo.ico;." --add-data "tkdnd;tkdnd" QphotoRenamer.py
+          pyinstaller --onefile --windowed --icon=logo.ico --add-data "QphotoRenamer.ini;." --add-data "logo.ico;." --add-data "tkdnd/*;tkdnd" QphotoRenamer.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -53,22 +53,23 @@ jobs:
             const response = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              per_page: 10, // 获取最近的 10 个 Release
+              per_page: 1, // 只获取最新的 Release
             });
-            // 查找符合语义化版本规范的 Release
-            for (const release of response.data) {
-              const tagName = release.tag_name;
-              const versionMatch = tagName.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              if (versionMatch) {
-                // 找到符合规范的版本号，递增 patch 部分
-                const major = parseInt(versionMatch[1], 10);
-                const minor = parseInt(versionMatch[2], 10);
-                const patch = parseInt(versionMatch[3], 10) + 1;
-                return `v${major}.${minor}.${patch}`;
-              }
+            if (response.data.length === 0) {
+              // 如果没有 Release，从 v1.0.0 开始
+              return 'v1.0.0';
             }
-            // 如果没有找到符合规范的 Release，则从 v1.0.0 开始
-            return 'v1.0.0';
+            const latestTag = response.data[0].tag_name;
+            const versionMatch = latestTag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+            if (!versionMatch) {
+              // 如果 tag_name 不符合规范，从 v1.0.0 开始
+              return 'v1.0.0';
+            }
+            // 递增版本号（例如 v1.0.5 -> v1.0.6）
+            const major = parseInt(versionMatch[1], 10);
+            const minor = parseInt(versionMatch[2], 10);
+            const patch = parseInt(versionMatch[3], 10) + 1;
+            return `v${major}.${minor}.${patch}`;
 
       - name: Create Release
         id: create_release
