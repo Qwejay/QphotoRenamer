@@ -57,20 +57,20 @@ jobs:
             });
             let version;
             if (response.data.length === 0) {
-              // 如果没有 Release，从 QphotoRenamer v1.0.0 开始
-              version = 'QphotoRenamer v1.0.0';
+              // 如果没有 Release，从 QphotoRenamer-v1.0.0 开始
+              version = 'QphotoRenamer-v1.0.0';
             } else {
               const latestTag = response.data[0].tag_name;
-              const versionMatch = latestTag.match(/^QphotoRenamer v(\d+)\.(\d+)\.(\d+)$/);
+              const versionMatch = latestTag.match(/^QphotoRenamer-v(\d+)\.(\d+)\.(\d+)$/);
               if (!versionMatch) {
-                // 如果 tag_name 不符合规范，从 QphotoRenamer v1.0.0 开始
-                version = 'QphotoRenamer v1.0.0';
+                // 如果 tag_name 不符合规范，从 QphotoRenamer-v1.0.0 开始
+                version = 'QphotoRenamer-v1.0.0';
               } else {
-                // 递增版本号（例如 QphotoRenamer v2.0.0 -> QphotoRenamer v2.0.1）
+                // 递增版本号（例如 QphotoRenamer-v2.0.0 -> QphotoRenamer-v2.0.1）
                 const major = parseInt(versionMatch[1], 10);
                 const minor = parseInt(versionMatch[2], 10);
                 const patch = parseInt(versionMatch[3], 10) + 1;
-                version = `QphotoRenamer v${major}.${minor}.${patch}`;
+                version = `QphotoRenamer-v${major}.${minor}.${patch}`;
               }
             }
             // 使用环境文件设置输出
@@ -82,12 +82,13 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const tagName = '${{ steps.get_version.outputs.version }}'; // 使用动态生成的版本号
+            const tagName = '${{ steps.get_version.outputs.version }}'; // 使用动态生成的版本号（例如 QphotoRenamer-v2.0.1）
+            const releaseName = tagName.replace(/-/g, ' '); // 将 - 替换为空格，用于 Release 名称
             const response = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: tagName,
-              name: 'Release ' + tagName,
+              tag_name: tagName, // 使用 QphotoRenamer-v2.0.1 作为 tag_name
+              name: 'Release ' + releaseName, // 使用 QphotoRenamer v2.0.1 作为 Release 名称
               draft: false,
               prerelease: false,
             });
