@@ -45,6 +45,26 @@ jobs:
           name: QphotoRenamer-build
           path: dist/QphotoRenamer.exe
 
+      - name: Delete existing tag if it exists
+        id: delete_tag
+        uses: actions/github-script@v6
+        with:
+          script: |
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/latest',
+              });
+              console.log('Deleted existing tag: latest');
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('Tag does not exist, skipping deletion');
+              } else {
+                throw error;
+              }
+            }
+
       - name: Create Release
         id: create_release
         uses: actions/github-script@v6
