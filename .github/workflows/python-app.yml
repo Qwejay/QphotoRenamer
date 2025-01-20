@@ -45,36 +45,42 @@ jobs:
           name: QphotoRenamer-build
           path: dist/QphotoRenamer.exe
 
-      - name: Delete existing tag if it exists
-        id: delete_tag
+      - name: Get latest release version
+        id: get_version
         uses: actions/github-script@v6
         with:
           script: |
-            try {
-              await github.rest.git.deleteRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: 'tags/latest',
-              });
-              console.log('Deleted existing tag: latest');
-            } catch (error) {
-              if (error.status === 404) {
-                console.log('Tag does not exist, skipping deletion');
-              } else {
-                throw error;
-              }
+            const response = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 1,
+            });
+            if (response.data.length === 0) {
+              // 如果没有 Release，从 v1.0.0 开始
+              return 'v1.0.0';
             }
+            const latestTag = response.data[0].tag_name;
+            const versionMatch = latestTag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+            if (!versionMatch) {
+              throw new Error(`Invalid tag format: ${latestTag}`);
+            }
+            // 递增版本号（例如 v1.0.5 -> v1.0.6）
+            const major = parseInt(versionMatch[1], 10);
+            const minor = parseInt(versionMatch[2], 10);
+            const patch = parseInt(versionMatch[3], 10) + 1;
+            return `v${major}.${minor}.${patch}`;
 
       - name: Create Release
         id: create_release
         uses: actions/github-script@v6
         with:
           script: |
+            const tagName = '${{ steps.get_version.outputs.result }}'; // 使用动态生成的版本号
             const response = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: 'latest',
-              name: 'Release latest',
+              tag_name: tagName,
+              name: 'Release ' + tagName,
               draft: false,
               prerelease: false,
             });
