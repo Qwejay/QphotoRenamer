@@ -7,7 +7,7 @@ import pillow_heif
 import ttkbootstrap as ttk
 from tkinter import filedialog, Toplevel, Label, Entry, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 import logging
 import re
 import json
@@ -15,6 +15,7 @@ import subprocess
 import webbrowser
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +44,7 @@ COMMON_DATE_FORMATS = [
 # 多语言支持
 LANGUAGES = {
     "简体中文": {
-        "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.1 —— QwejayHuang",
+        "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.2 —— QwejayHuang",
         "description_base": "拖放文件或照片，将按照",
         "description_suffix": "重命名文件。若无法获取拍摄日期（或非媒体文件），则使用",
         "start_renaming": "开始重命名",
@@ -111,7 +112,7 @@ LANGUAGES = {
         "show_errors_only": "仅显示错误"
     },
     "English": {
-        "window_title": "QphotoRenamer 2.1 —— QwejayHuang",
+        "window_title": "QphotoRenamer 2.2 —— QwejayHuang",
         "description_base": "Drag and drop files or photos to rename them based on ",
         "description_suffix": ". If the shooting date is unavailable, use ",
         "start_renaming": "Start Renaming",
@@ -186,25 +187,26 @@ SKIP_EXTENSIONS = []
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.root.title("文件&照片批量重命名 QphotoRenamer 2.1 —— QwejayHuang")
+        self.root.title("文件&照片批量重命名 QphotoRenamer 2.2 —— QwejayHuang")
         self.root.geometry("850x600")
         self.root.iconbitmap(icon_path)
 
         self.style = ttk.Style('litera')
+        self.lock = Lock()  # 初始化线程锁
 
         # 初始化变量
         self.auto_scroll_var = ttk.BooleanVar(value=True)
-        self.show_errors_only_var = ttk.BooleanVar(value=False)  # 只显示错误
+        self.show_errors_only_var = ttk.BooleanVar(value=False)
         self.language_var = ttk.StringVar(value=self.load_language())
         self.prefix_var = ttk.StringVar(value="")
         self.suffix_var = ttk.StringVar(value="")
         self.skip_extensions_var = ttk.StringVar(value="")
         self.date_basis_var = ttk.StringVar(value="拍摄日期")
         self.alternate_date_var = ttk.StringVar(value="修改日期")
-        self.fast_add_mode_var = ttk.BooleanVar(value=False)  # 快速添加模式，默认为不启用
-        self.fast_add_threshold_var = ttk.IntVar(value=10)  # 文件数量阈值，默认为 10
-        self.name_conflict_var = ttk.StringVar(value="add_suffix")  # 默认选项为增加后缀
-        self.suffix_option_var = ttk.StringVar(value="_001")  # 后缀选项
+        self.fast_add_mode_var = ttk.BooleanVar(value=False)
+        self.fast_add_threshold_var = ttk.IntVar(value=10)
+        self.name_conflict_var = ttk.StringVar(value="add_suffix")
+        self.suffix_option_var = ttk.StringVar(value="_001")
 
         # 初始化语言
         self.lang = LANGUAGES[self.language_var.get()]
@@ -466,10 +468,21 @@ class PhotoRenamer:
 
     def save_settings(self, date_format, language, prefix, suffix, skip_extensions_input, settings_window):
         global DATE_FORMAT, SKIP_EXTENSIONS
+
+        # 验证日期格式
+        try:
+            test_date = datetime.datetime.now()
+            test_date.strftime(date_format)
+        except ValueError as e:
+            messagebox.showerror("格式错误", f"无效的日期格式: {str(e)}")
+            return
+
+        # 更新全局变量
         DATE_FORMAT = date_format
         skip_ext_input = skip_extensions_input.strip().lower()
         SKIP_EXTENSIONS = ['.' + ext for ext in skip_ext_input.split()]
 
+        # 构建配置字典
         config = {
             "date_format": DATE_FORMAT,
             "language": language,
@@ -483,11 +496,17 @@ class PhotoRenamer:
             "name_conflict": self.name_conflict_var.get(),
             "suffix_option": self.suffix_option_var.get()
         }
+
+        # 将配置写入文件
         with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
+
+        # 更新语言和界面
         self.set_language(language)
         self.update_renamed_name_column()
         self.update_status_bar("save_settings")
+
+        # 关闭设置窗口
         settings_window.destroy()
 
     def load_settings(self):
@@ -495,6 +514,7 @@ class PhotoRenamer:
         if os.path.exists("QphotoRenamer.ini"):
             with open("QphotoRenamer.ini", "r", encoding="utf-8") as f:
                 config = json.load(f)
+                # 读取配置并设置全局变量
                 DATE_FORMAT = config.get("date_format", "%Y%m%d_%H%M%S")
                 self.language_var.set(config.get("language", "简体中文"))
                 self.prefix_var.set(config.get("prefix", ""))
@@ -503,20 +523,24 @@ class PhotoRenamer:
                 self.fast_add_mode_var.set(config.get("fast_add_mode", False))
                 self.name_conflict_var.set(config.get("name_conflict", "增加后缀"))
                 self.suffix_option_var.set(config.get("suffix_option", "_001"))
+
                 # 设置语言
                 self.set_language(self.language_var.get())
+
                 # 设置下拉框的值
                 date_basis_internal = config.get("date_basis", "拍摄日期")
                 for item in self.lang["date_bases"]:
                     if item['value'] == date_basis_internal:
                         self.date_basis_var.set(item['display'])
                         break
+
                 alternate_date_basis_internal = config.get("alternate_date_basis", "修改日期")
                 for item in self.lang["alternate_dates"]:
                     if item['value'] == alternate_date_basis_internal:
                         self.alternate_date_var.set(item['display'])
                         break
         else:
+            # 默认配置
             DATE_FORMAT = "%Y%m%d_%H%M%S"
             self.skip_extensions_var.set("")
             self.fast_add_mode_var.set(False)
@@ -672,16 +696,13 @@ class PhotoRenamer:
         self.start_button.config(state=ttk.DISABLED)
         self.stop_button.config(state=ttk.NORMAL)
 
-        # 清除旧的重命名记录
         original_to_new_mapping.clear()
-
         processed_files.clear()
         unrenamed_files = 0
         renamed_files_count = 0
 
         total_files = len(self.files_tree.get_children())
 
-        # 如果没有文件需要处理，提示用户
         if total_files == 0:
             self.update_status_bar("ready")
             messagebox.showinfo("提示", "没有文件需要重命名。")
@@ -691,27 +712,35 @@ class PhotoRenamer:
             return
 
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(self.rename_photo, self.files_tree.item(item, 'values')[0], item): item for item in self.files_tree.get_children()}
+            futures = {}
+            for item in self.files_tree.get_children():
+                file_path = self.files_tree.item(item, 'values')[0]
+                future = executor.submit(self.rename_photo, file_path, item)
+                futures[future] = (file_path, item)
+
             for future in as_completed(futures):
-                if stop_event.is_set():  # 检查是否停止
-                    executor.shutdown(wait=False)  # 立即停止线程池
+                if stop_event.is_set():
+                    executor.shutdown(wait=False)
                     break
-                item = futures[future]
+                
+                file_path, item = futures[future]
                 try:
-                    renamed = future.result()
-                    if renamed:
-                        renamed_files_count += 1
-                    else:
-                        unrenamed_files += 1
+                    success, new_path = future.result()
+                    with self.lock:
+                        if success:
+                            renamed_files_count += 1
+                        else:
+                            unrenamed_files += 1
                 except Exception as e:
                     logging.error(f"处理文件时出错: {e}")
-                    unrenamed_files += 1
+                    with self.lock:
+                        unrenamed_files += 1
 
                 self.progress_var.set((renamed_files_count + unrenamed_files) * 100 / total_files)
                 if self.auto_scroll_var.get():
                     self.files_tree.see(item)
 
-        if not stop_event.is_set():  # 如果没有停止，则更新状态
+        if not stop_event.is_set():
             self.update_status_bar("renaming_success", renamed_files_count, unrenamed_files)
             self.files_tree.tag_configure('renamed', background='lightgreen')
             self.files_tree.tag_configure('failed', background='lightcoral')
@@ -724,96 +753,134 @@ class PhotoRenamer:
         self.stop_button.config(state=ttk.DISABLED)
         current_renaming_file = None
         self.exif_cache.clear()
-        stop_event.clear()  # 重置停止事件
+        stop_event.clear()
+
+    def sanitize_filename(self, name):
+        """过滤文件名中的非法字符并限制长度"""
+        illegal_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', '\0']
+        for char in illegal_chars:
+            name = name.replace(char, '-')
+        
+        max_length = 255
+        if len(name) > max_length:
+            name = name[:max_length-5] + name[-5:]
+        
+        name = name.strip().rstrip('.')
+        return name
+
+    def generate_new_name(self, file_path, exif_data):
+        """根据文件路径和 EXIF 数据生成新名称"""
+        try:
+            # 如果配置文件中设置了“保留原文件名”，则直接返回原文件名
+            if self.alternate_date_var.get() == "保留原文件名":
+                return os.path.basename(file_path)
+
+            ext = os.path.splitext(file_path)[1]  # 获取文件扩展名
+            base_name = os.path.splitext(os.path.basename(file_path))[0]  # 默认使用文件名（不含扩展名）
+
+            # 获取用户选择的日期基准
+            date_basis = self.date_basis_var.get()
+            alternate_date_basis = self.alternate_date_var.get()
+
+            # 根据日期基准获取日期
+            date_obj = None
+            if date_basis == "拍摄日期":
+                if exif_data and 'DateTimeOriginalParsed' in exif_data:
+                    date_obj = exif_data['DateTimeOriginalParsed']
+                else:
+                    if alternate_date_basis == "修改日期":
+                        date_obj = self.get_file_modification_date(file_path)
+                    elif alternate_date_basis == "创建日期":
+                        date_obj = self.get_file_creation_date(file_path)
+                    elif alternate_date_basis == "保留原名":
+                        return os.path.basename(file_path)  # 直接返回原文件名
+            elif date_basis == "修改日期":
+                date_obj = self.get_file_modification_date(file_path)
+            elif date_basis == "创建日期":
+                date_obj = self.get_file_creation_date(file_path)
+
+            # 如果成功获取日期，则格式化日期并过滤非法字符
+            if date_obj:
+                try:
+                    base_name = date_obj.strftime(DATE_FORMAT)
+                    base_name = self.sanitize_filename(base_name)  # 关键修复：过滤非法字符
+                except Exception as e:
+                    logging.error(f"日期格式错误: {DATE_FORMAT}, 错误: {str(e)}")
+                    base_name = "INVALID_FORMAT"
+            else:
+                # 如果无法获取日期，则根据备用选项处理
+                if alternate_date_basis == "保留原名":
+                    return os.path.basename(file_path)  # 直接返回原文件名
+                else:
+                    base_name = "NO_DATE"
+
+            # 生成最终名称
+            return f"{self.prefix_var.get()}{base_name}{self.suffix_var.get()}{ext}"
+        except Exception as e:
+            logging.error(f"生成新名称时发生错误: {str(e)}")
+            return "ERROR_" + os.path.basename(file_path)
+
+    def generate_unique_filename(self, directory, base_name, ext, suffix_style):
+        """生成唯一文件名"""
+        counter = 1
+        original_base = base_name
+        new_filename = f"{base_name}{ext}"
+        new_file_path = os.path.join(directory, new_filename)
+
+        while os.path.exists(new_file_path):
+            if suffix_style == "_001":
+                suffix = f"_{counter:03d}"
+            elif suffix_style == "-01":
+                suffix = f"-{counter:02d}"
+            elif suffix_style == "_1":
+                suffix = f"_{counter}"
+            else:
+                suffix = f"_{counter:03d}"
+
+            new_filename = f"{original_base}{suffix}{ext}"
+            new_file_path = os.path.join(directory, new_filename)
+            counter += 1
+
+        return new_file_path
 
     def rename_photo(self, file_path, item):
-        global unrenamed_files
-        filename = os.path.basename(file_path)
-        logging.info(f"处理文件: {file_path}")
-        logging.info(f"命名冲突处理方式: {self.name_conflict_var.get()}")
-        logging.info(f"后缀选项: {self.suffix_option_var.get()}")
+        try:
+            # 如果配置文件中设置了“保留原文件名”，则直接跳过重命名
+            if self.alternate_date_var.get() == "保留原文件名":
+                with self.lock:
+                    self.files_tree.set(item, 'status', '已跳过（保留原文件名）')
+                    self.files_tree.item(item, tags=('skipped',))  # 应用 skipped 样式
+                return True, file_path  # 返回原文件名，表示未重命名
 
-        if file_path in original_to_new_mapping:
-            return False
+            # 否则，继续正常重命名逻辑
+            exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
+            new_name = self.generate_new_name(file_path, exif_data)
+            directory = os.path.dirname(file_path)
+            base_name, ext = os.path.splitext(new_name)
+            base_name = os.path.basename(base_name)
+            new_file_path = os.path.join(directory, f"{base_name}{ext}")
 
-        ext = os.path.splitext(filename)[1].lower()
-        if ext in SKIP_EXTENSIONS:
-            logging.info(f"跳过文件: {filename}，文件类型被跳过")
-            self.files_tree.set(item, 'status', '此文件类型被跳过')
-            unrenamed_files += 1
-            return False
+            # 处理文件名冲突
+            if os.path.exists(new_file_path):
+                suffix_style = self.suffix_option_var.get()
+                new_file_path = self.generate_unique_filename(directory, base_name, ext, suffix_style)
 
-        date_basis = self.date_basis_var.get()
-        if date_basis == "拍摄日期":
-            if file_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
-                shot_date = self.get_video_creation_date(file_path)
-                if not shot_date:
-                    if self.alternate_date_var.get() == "修改日期":
-                        shot_date = self.get_file_modification_date(file_path)
-                    elif self.alternate_date_var.get() == "创建日期":
-                        shot_date = self.get_file_creation_date(file_path)
-                    elif self.alternate_date_var.get() == "保留原名":
-                        self.files_tree.set(item, 'status', '保留原名')
-                        unrenamed_files += 1
-                        return False
-            else:
-                exif_data = self.get_heic_data(file_path) if file_path.lower().endswith('.heic') else self.get_exif_data(file_path)
-                shot_date = exif_data.get('DateTimeOriginalParsed') if exif_data else None
-                if not shot_date:
-                    if self.alternate_date_var.get() == "修改日期":
-                        shot_date = self.get_file_modification_date(file_path)
-                    elif self.alternate_date_var.get() == "创建日期":
-                        shot_date = self.get_file_creation_date(file_path)
-                    elif self.alternate_date_var.get() == "保留原名":
-                        self.files_tree.set(item, 'status', '保留原名')
-                        unrenamed_files += 1
-                        return False
-        elif date_basis == "修改日期":
-            shot_date = self.get_file_modification_date(file_path)
-        elif date_basis == "创建日期":
-            shot_date = self.get_file_creation_date(file_path)
-
-        if shot_date:
-            base_name = shot_date.strftime(DATE_FORMAT)
-        else:
-            self.files_tree.set(item, 'status', '无法获取日期')
-            unrenamed_files += 1
-            return False
-
-        prefix = self.prefix_var.get()
-        suffix = self.suffix_var.get()
-        ext = os.path.splitext(filename)[1]
-        directory = os.path.dirname(file_path)
-        new_file_name = f"{prefix}{base_name}{suffix}"
-
-        # 根据命名冲突处理方式决定新文件名
-        if self.name_conflict_var.get() == self.lang["add_suffix_option"]:
-            new_file_path = self.generate_unique_filename(directory, new_file_name, ext)
-        elif self.name_conflict_var.get() == self.lang["keep_original_option"]:
-            new_file_path = file_path  # 保留原文件名
-            self.files_tree.set(item, 'status', '保留原文件名')
-            unrenamed_files += 1
-            return False
-
-        if new_file_path != file_path:
-            try:
-                os.rename(file_path, new_file_path)
-                logging.info(f'重命名成功: "{file_path}" 重命名为 "{new_file_path}"')
+            # 执行重命名
+            os.rename(file_path, new_file_path)
+            with self.lock:
                 original_to_new_mapping[file_path] = new_file_path
                 self.files_tree.set(item, 'filename', new_file_path)
                 self.files_tree.set(item, 'status', '已重命名')
                 self.files_tree.item(item, tags=('renamed',))
-                return True
-            except Exception as e:
-                logging.error(f"重命名失败: {file_path}, 错误: {e}")
+            return True, new_file_path
+
+        except Exception as e:
+            logging.error(f"重命名失败: {str(e)}")
+            with self.lock:
                 self.files_tree.set(item, 'status', f'错误: {e}')
                 self.files_tree.item(item, tags=('failed',))
-        else:
-            logging.info(f'跳过重命名: "{file_path}" 已经是重命名后的名字')
-            self.files_tree.set(item, 'status', '已重命名')
-            self.files_tree.item(item, tags=('renamed',))
-
-        return False
+                unrenamed_files += 1
+            return False, None
 
     def get_exif_data(self, file_path):
         """获取文件的 EXIF 信息，并缓存结果"""
@@ -982,26 +1049,6 @@ class PhotoRenamer:
             logging.error(f"获取文件创建日期失败: {file_path}, 错误: {e}")
         return None
 
-    def generate_unique_filename(self, directory, base_name, ext):
-        new_filename = f"{base_name}{ext}"
-        new_file_path = os.path.join(directory, new_filename)
-        counter = 1
-
-        # 根据用户选择的后缀选项生成唯一文件名
-        while os.path.exists(new_file_path):
-            if self.suffix_option_var.get() == "_001":
-                new_filename = f"{base_name}_{counter:03d}{ext}"
-            elif self.suffix_option_var.get() == "-01":
-                new_filename = f"{base_name}-{counter:02d}{ext}"
-            elif self.suffix_option_var.get() == "_1":
-                new_filename = f"{base_name}_{counter}{ext}"
-            else:
-                new_filename = f"{base_name}_{counter:03d}{ext}"  # 默认使用 _001 格式
-            new_file_path = os.path.join(directory, new_filename)
-            counter += 1
-
-        return new_file_path
-
     def undo_rename(self):
         global original_to_new_mapping
         for original, new in original_to_new_mapping.items():
@@ -1027,45 +1074,6 @@ class PhotoRenamer:
         self.files_tree.delete(*self.files_tree.get_children())
         self.update_file_count()  # 更新文件总数
 
-    def generate_new_name(self, file_path, exif_data):
-        """根据文件路径和 EXIF 数据生成新名称"""
-        # 获取文件扩展名
-        ext = os.path.splitext(file_path)[1]
-
-        # 初始化 base_name
-        base_name = os.path.splitext(os.path.basename(file_path))[0]  # 默认使用文件名（不含扩展名）
-
-        # 根据用户选择的日期格式或备用日期生成新名称
-        if self.date_basis_var.get() == "拍摄日期":
-            if exif_data and 'DateTimeOriginalParsed' in exif_data:
-                base_name = exif_data['DateTimeOriginalParsed'].strftime(DATE_FORMAT)
-            else:
-                # 如果没有 EXIF 信息，使用备用日期
-                if self.alternate_date_var.get() == "修改日期":
-                    mod_date = self.get_file_modification_date(file_path)
-                    if mod_date:
-                        base_name = mod_date.strftime(DATE_FORMAT)
-                elif self.alternate_date_var.get() == "创建日期":
-                    create_date = self.get_file_creation_date(file_path)
-                    if create_date:
-                        base_name = create_date.strftime(DATE_FORMAT)
-                # 如果备用日期是“保留原名”，则 base_name 保持不变（使用文件名）
-        elif self.date_basis_var.get() == "修改日期":
-            mod_date = self.get_file_modification_date(file_path)
-            if mod_date:
-                base_name = mod_date.strftime(DATE_FORMAT)
-        elif self.date_basis_var.get() == "创建日期":
-            create_date = self.get_file_creation_date(file_path)
-            if create_date:
-                base_name = create_date.strftime(DATE_FORMAT)
-
-        # 获取前缀和后缀
-        prefix = self.prefix_var.get()
-        suffix = self.suffix_var.get()
-
-        # 生成新名称
-        new_name = f"{prefix}{base_name}{suffix}{ext}"
-        return new_name
 
     def open_file(self, event):
         item = self.files_tree.identify_row(event.y)
@@ -1263,5 +1271,8 @@ class PhotoRenamer:
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
-    renamer = PhotoRenamer(root)
-    root.mainloop()
+    try:
+        renamer = PhotoRenamer(root)
+        root.mainloop()
+    except Exception as e:
+        messagebox.showerror("致命错误", f"程序遇到严重错误: {str(e)}")
