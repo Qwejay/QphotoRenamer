@@ -1,6 +1,50 @@
 # QphotoRenamer
 
-QphotoRenamer 是一个批量重命名工具，支持所有文件格式，会根据照片或视频的拍摄日期重命名图片。该工具使用Python编写，并使用Tkinter构建用户界面。
+QphotoRenamer 是一个简单易用的文件与照片批量重命名工具，支持根据拍摄日期、修改日期或创建日期重命名文件。
+
+## 主要功能
+
+- 支持拖放文件和文件夹
+- 支持多种日期格式重命名
+- 支持 HEIC 格式照片
+- 支持多语言（简体中文/English）
+- 支持快速添加模式
+- 支持文件名冲突处理
+- 支持撤销重命名
+- 支持查看文件 EXIF 信息
+- 支持自定义前缀和后缀
+
+## 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+## 使用方法
+
+1. 运行程序：`python QphotoRenamer.py`
+2. 拖放文件或点击"添加文件"选择文件
+3. 在设置中配置重命名格式
+4. 点击"开始重命名"执行重命名操作
+
+## 设置选项
+
+- 重命名格式：支持多种日期格式
+- 日期基准：拍摄日期/修改日期/创建日期
+- 备用日期：当无法获取拍摄日期时的替代方案
+- 前缀/后缀：可自定义文件名前缀和后缀
+- 快速添加模式：批量添加文件时提高效率
+- 文件名冲突处理：自动添加后缀或保留原文件名
+
+## 快捷键
+
+- 双击文件：打开文件
+- 右键文件：移除文件
+- 点击文件名：查看 EXIF 信息
+
+## 许可证
+
+MIT License
 
 ## 功能特性
 
@@ -17,9 +61,14 @@ QphotoRenamer 是一个批量重命名工具，支持所有文件格式，会根
 
 ## QphotoRenamer 更新日志
 
+### 版本 2.2 (2024-01-01)
+- 代码重构：将全局变量重构为类变量，减少全局状态带来的问题
+- 代码优化，添加类型注解，提高代码可读性和可维护性
+- 代码规范：统一变量命名风格，改进代码格式和缩进
+
 ### 版本 2.0 (2024-12-29)
 - 新增快速添加模式，文件数量超过阈值时跳过文件状态的读取，提升加载速度
-- 新增文件名冲突处理选项，支持“增加后缀”或“保留原文件名”
+- 新增文件名冲突处理选项，支持"增加后缀"或"保留原文件名"
 - 优化多线程处理功能，提升重命名效率，支持中途停止
 - 新增文件总数显示，状态栏实时更新文件数量
 - 新增文件处理队列，支持批量添加文件，后台逐步处理
@@ -27,10 +76,10 @@ QphotoRenamer 是一个批量重命名工具，支持所有文件格式，会根
 - 优化状态栏显示，实时反馈文件加载状态
 - 修复文件重复添加、EXIF读取失败、文件名冲突处理等问题
 - 优化代码结构，提升可读性和可维护性
-- 修复排除拓展名不生效需要加“.”才生效的问题
-  
+- 修复排除拓展名不生效需要加"."才生效的问题
+
 ### 版本 1.0.8 (2024-12-18)
-- 增加对视频文件的媒体创建日期的读取，以便更好的服务按“拍摄日期”重命名功能
+- 增加对视频文件的媒体创建日期的读取，以便更好的服务按"拍摄日期"重命名功能
 - 增加新名称的预览列显示
 
 ### 版本 1.0.7 (2024-12-17)
@@ -89,7 +138,7 @@ pyinstaller打包参数：
 安装打包工具：pip install pyinstaller
 打包：
 pyinstaller --onefile --windowed --icon=logo.ico --add-data "QphotoRenamer.ini;." --add-data icon.ico;." --add-data "tkdnd;tkdnd" QphotoRenamer.py
-
+pyinstaller --onefile --windowed --icon=icon.ico --add-data "QPhotoRenamer.ini;." --add-data "icon.ico;." --add-data "C:\Users\dkm38\AppData\Local\Programs\Python\Python313\Lib\site-packages\tkinterdnd2\tkdnd;tkdnd" --add-data "C:\Users\dkm38\AppData\Local\Programs\Python\Python313\Lib\site-packages\tkinterdnd2;tkinterdnd2" --name QPhotoRenamer QphotoRenamer.py
 nuitk打包参数：
 安装打包工具：pip install nuitka
 打包：
