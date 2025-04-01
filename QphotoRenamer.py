@@ -6,7 +6,7 @@ import exifread
 import piexif
 import pillow_heif
 import ttkbootstrap as ttk
-from tkinter import filedialog, Toplevel, Label, Entry, messagebox
+from tkinter import filedialog, Toplevel, Label, Entry, messagebox, Text, WORD, END, INSERT
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from threading import Thread, Event, Lock
 import logging
@@ -19,6 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 from collections import OrderedDict
 from functools import lru_cache
+import configparser
+import tkinter as tk
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +108,11 @@ LANGUAGES = {
         ],
         "suffix_options": ["_001", "-01", "_1"],
         "suffix_edit_label": "编辑后缀名称:",
-        "show_errors_only": "仅显示错误"
+        "show_errors_only": "仅显示错误",
+        "name_conflicts": [
+            {"display": "增加后缀", "value": "add_suffix"},
+            {"display": "保留原文件名", "value": "keep_original"}
+        ]
     },
     "English": {
         "window_title": "QphotoRenamer 2.2 —— QwejayHuang",
@@ -174,7 +180,11 @@ LANGUAGES = {
         ],
         "suffix_options": ["_001", "-01", "Custom"],
         "suffix_edit_label": "Edit Suffix Name:",
-        "show_errors_only": "Only Errors"
+        "show_errors_only": "Only Errors",
+        "name_conflicts": [
+            {"display": "Add suffix", "value": "add_suffix"},
+            {"display": "Keep original name", "value": "keep_original"}
+        ]
     }
 }
 
@@ -199,6 +209,21 @@ class LRUCache:
 class PhotoRenamer:
     def __init__(self, root):
         # 类变量定义，代替全局变量
+        self.root = root
+        self.template_var = ttk.StringVar()  # 重命名模板变量
+
+        # 配置文件中读取的内容先设置默认值
+        self.prefix_var = ttk.StringVar(value="")  # 保留前缀变量但不应用
+        self.suffix_var = ttk.StringVar(value="")  # 保留后缀变量但不应用
+
+        # 其他配置变量
+        self.language_var = ttk.StringVar(value="简体中文")
+        self.date_basis_var = ttk.StringVar(value="拍摄日期")
+        self.alternate_date_var = ttk.StringVar(value="修改日期")
+        self.auto_scroll_var = ttk.BooleanVar(value=True)
+        self.show_errors_only_var = ttk.BooleanVar(value=False)
+        self.fast_add_mode_var = ttk.BooleanVar(value=False)
+        self.fast_add_threshold_var = ttk.IntVar(value=10)
         self.date_format = "%Y%m%d_%H%M%S"  # 默认日期格式
         self.stop_event = Event()  # 停止事件
         self.renaming_in_progress = False
@@ -208,10 +233,10 @@ class PhotoRenamer:
         self.current_renaming_file = None
         self.skip_extensions = []
         
-        # 初始化缓存
-        self.exif_cache = LRUCache(1000)  # 最多缓存1000个文件的EXIF信息
-        self.status_cache = LRUCache(1000)  # 最多缓存1000个文件的状态
-        self.file_hash_cache = LRUCache(1000)  # 最多缓存1000个文件的哈希值
+        # 初始化缓存（使用固定大小）
+        self.exif_cache = LRUCache(1000)  # EXIF缓存
+        self.status_cache = LRUCache(1000)  # 状态缓存
+        self.file_hash_cache = LRUCache(1000)  # 文件哈希缓存
         self.error_cache = {}  # 错误缓存
         self._settings_cache = None  # 设置缓存
         self._update_timer = None  # UI更新定时器
@@ -228,7 +253,7 @@ class PhotoRenamer:
         # 初始化变量
         self.auto_scroll_var = ttk.BooleanVar(value=True)
         self.show_errors_only_var = ttk.BooleanVar(value=False)
-        self.language_var = ttk.StringVar(value=self.load_language())
+        self.language_var = ttk.StringVar(value="简体中文")  # 默认语言
         self.prefix_var = ttk.StringVar(value="")
         self.suffix_var = ttk.StringVar(value="")
         self.skip_extensions_var = ttk.StringVar(value="")
@@ -238,6 +263,7 @@ class PhotoRenamer:
         self.fast_add_threshold_var = ttk.IntVar(value=10)
         self.name_conflict_var = ttk.StringVar(value="add_suffix")
         self.suffix_option_var = ttk.StringVar(value="_001")
+        self.template_var = ttk.StringVar(value="%Y%m%d_%H%M%S")
 
         # 初始化语言
         self.lang = LANGUAGES[self.language_var.get()]
@@ -248,11 +274,131 @@ class PhotoRenamer:
 
         # 初始化界面
         self.initialize_ui()
-        self.load_settings()
-        self.set_language(self.language_var.get())
+        
+        # 加载或创建配置
+        self.load_or_create_settings()
         
         # 设置定期清理缓存
         self.root.after(300000, self.cleanup_cache)  # 每5分钟清理一次缓存
+
+    def load_or_create_settings(self):
+        """加载或创建配置文件"""
+        try:
+            if not os.path.exists("QphotoRenamer.ini"):
+                # 创建默认配置
+                config = configparser.ConfigParser(interpolation=None)  # 禁用插值
+                
+                # 基本设置
+                config['General'] = {
+                    'language': '简体中文',
+                    'template': '%%Y%%m%%d_%%H%%M%%S',  # 转义%符号
+                    'prefix': '',
+                    'suffix': '',
+                    'skip_extensions': ''
+                }
+                
+                # 日期设置
+                config['Date'] = {
+                    'date_basis': '拍摄日期',
+                    'alternate_date_basis': '修改日期'
+                }
+                
+                # 文件处理设置
+                config['FileHandling'] = {
+                    'fast_add_mode': 'false',
+                    'fast_add_threshold': '10',
+                    'name_conflict': 'add_suffix',
+                    'suffix_option': '_001',
+                    'auto_scroll': 'true',
+                    'show_errors_only': 'false'
+                }
+                
+                # 界面设置
+                config['UI'] = {
+                    'window_width': '850',
+                    'window_height': '700',
+                    'theme': 'litera'
+                }
+                
+                # 保存配置文件
+                with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
+                    config.write(f)
+                
+                # 加载默认设置
+                self.load_settings()
+            else:
+                # 加载现有配置
+                self.load_settings()
+                
+        except Exception as e:
+            logging.error(f"加载或创建设置时出错: {e}")
+            self.handle_error(e, "加载或创建设置")
+
+    def load_settings(self):
+        """从INI文件加载设置"""
+        try:
+            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
+            
+            if os.path.exists("QphotoRenamer.ini"):
+                config.read("QphotoRenamer.ini", encoding="utf-8")
+                
+                # 加载基本设置
+                if 'General' in config:
+                    self.language_var.set(config['General'].get('language', '简体中文'))
+                    # 处理模板中的转义%符号
+                    template = config['General'].get('template', '%%Y%%m%%d_%%H%%M%%S')
+                    self.template_var.set(template.replace('%%', '%'))  # 还原%符号
+                    self.prefix_var.set(config['General'].get('prefix', ''))
+                    self.suffix_var.set(config['General'].get('suffix', ''))
+                    skip_extensions = config['General'].get('skip_extensions', '')
+                    self.skip_extensions = skip_extensions.split()
+                    self.skip_extensions_var.set(" ".join([ext[1:] for ext in self.skip_extensions]))
+                
+                # 加载日期设置
+                if 'Date' in config:
+                    date_basis = config['Date'].get('date_basis', '拍摄日期')
+                    alternate_date_basis = config['Date'].get('alternate_date_basis', '修改日期')
+                    self.date_basis_var.set(next(item['display'] for item in self.lang["date_bases"] if item['value'] == date_basis))
+                    self.alternate_date_var.set(next(item['display'] for item in self.lang["alternate_dates"] if item['value'] == alternate_date_basis))
+                
+                # 加载文件处理设置
+                if 'FileHandling' in config:
+                    self.fast_add_mode_var.set(config['FileHandling'].getboolean('fast_add_mode', False))
+                    self.fast_add_threshold_var.set(config['FileHandling'].getint('fast_add_threshold', 10))
+                    name_conflict = config['FileHandling'].get('name_conflict', 'add_suffix')
+                    self.name_conflict_var.set(next(item['display'] for item in self.lang["name_conflicts"] if item['value'] == name_conflict))
+                    self.suffix_option_var.set(config['FileHandling'].get('suffix_option', '_001'))
+                    self.auto_scroll_var.set(config['FileHandling'].getboolean('auto_scroll', True))
+                    self.show_errors_only_var.set(config['FileHandling'].getboolean('show_errors_only', False))
+                
+                # 加载缓存设置
+                if 'Cache' in config:
+                    exif_cache_size = config['Cache'].getint('exif_cache_size', 1000)
+                    status_cache_size = config['Cache'].getint('status_cache_size', 1000)
+                    file_hash_cache_size = config['Cache'].getint('file_hash_cache_size', 1000)
+                    
+                    self.exif_cache = LRUCache(exif_cache_size)
+                    self.status_cache = LRUCache(status_cache_size)
+                    self.file_hash_cache = LRUCache(file_hash_cache_size)
+                
+                # 加载界面设置
+                if 'UI' in config:
+                    width = config['UI'].getint('window_width', 850)
+                    height = config['UI'].getint('window_height', 600)
+                    theme = config['UI'].get('theme', 'litera')
+                    
+                    self.root.geometry(f"{width}x{height}")
+                    self.style.theme_use(theme)
+                
+                # 更新语言
+                self.set_language(self.language_var.get())
+                
+                # 更新UI
+                self.update_renamed_name_column()
+                
+        except Exception as e:
+            logging.error(f"加载设置时出错: {e}")
+            self.handle_error(e, "加载设置")
 
     def get_file_hash(self, file_path: str) -> str:
         """计算文件的MD5哈希值"""
@@ -488,105 +634,203 @@ class PhotoRenamer:
         self.file_count_label.text_key = "file_count"
 
     def open_settings(self):
+        """打开设置窗口"""
         settings_window = ttk.Toplevel(self.root)
-        settings_window.title(self.lang["settings_window_title"])
-        settings_window.geometry("500x650")
-
-        # 主框架
+        settings_window.title(self.lang["settings"])
+        settings_window.geometry("800x600")  # 调整窗口大小
+        settings_window.resizable(True, True)  # 允许调整大小
+        settings_window.transient(self.root)  # 设置为主窗口的临时窗口
+        settings_window.grab_set()  # 模态窗口
+        
+        # 创建主框架
         main_frame = ttk.Frame(settings_window)
         main_frame.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 创建notebook
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 基本设置标签页
+        basic_frame = ttk.Frame(notebook)
+        notebook.add(basic_frame, text="基本设置")
+        
+        # 模板编辑器
+        template_frame = ttk.LabelFrame(basic_frame, text="重命名模板")
+        template_frame.pack(fill=ttk.X, padx=10, pady=5)
+        template_editor = TemplateEditor(template_frame, self.template_var)
+        template_editor.pack(fill=ttk.X, padx=5, pady=5)
+        
+        # 日期设置标签页
+        date_frame = ttk.Frame(notebook)
+        notebook.add(date_frame, text="日期设置")
+        
+        # 日期基准设置
+        date_basis_frame = ttk.LabelFrame(date_frame, text="日期基准")
+        date_basis_frame.pack(fill=ttk.X, padx=10, pady=5)
+        
+        # 主要日期基准
+        main_date_frame = ttk.Frame(date_basis_frame)
+        main_date_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(main_date_frame, text="主要日期基准:").pack(side=ttk.LEFT)
+        date_basis_combobox = ttk.Combobox(main_date_frame, 
+                                         textvariable=self.date_basis_var,
+                                         values=[item['display'] for item in self.lang["date_bases"]],
+                                         state="readonly")
+        date_basis_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        
+        # 备用日期
+        alternate_date_frame = ttk.Frame(date_basis_frame)
+        alternate_date_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(alternate_date_frame, text="无拍摄日期时:").pack(side=ttk.LEFT)
+        alternate_date_combobox = ttk.Combobox(alternate_date_frame, 
+                                             textvariable=self.alternate_date_var,
+                                             values=[item['display'] for item in self.lang["alternate_dates"]],
+                                             state="readonly")
+        alternate_date_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        
+        # 文件处理标签页
+        file_frame = ttk.Frame(notebook)
+        notebook.add(file_frame, text="文件处理")
+        
+        # 快速添加模式
+        fast_add_frame = ttk.LabelFrame(file_frame, text="快速添加模式")
+        fast_add_frame.pack(fill=ttk.X, padx=10, pady=5)
+        
+        fast_add_checkbox = ttk.Checkbutton(fast_add_frame,
+                                          text="启用快速添加模式",
+                                          variable=self.fast_add_mode_var,
+                                          command=lambda: self.toggle_fast_add_threshold_entry(fast_add_threshold_entry))
+        fast_add_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+        
+        # 快速添加阈值
+        fast_add_threshold_frame = ttk.Frame(fast_add_frame)
+        fast_add_threshold_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(fast_add_threshold_frame, text="文件数量阈值:").pack(side=ttk.LEFT)
+        fast_add_threshold_entry = ttk.Entry(fast_add_threshold_frame,
+                                  textvariable=self.fast_add_threshold_var, 
+                                  validate="key", 
+                                  validatecommand=(self.root.register(self.validate_threshold_input), '%P'))
+        fast_add_threshold_entry.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        fast_add_threshold_entry.configure(state='disabled')
+        
+        # 文件名冲突处理
+        name_conflict_frame = ttk.LabelFrame(file_frame, text="文件名冲突处理")
+        name_conflict_frame.pack(fill=ttk.X, padx=10, pady=5)
+        
+        conflict_frame = ttk.Frame(name_conflict_frame)
+        conflict_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(conflict_frame, text="重命名后文件名冲突时:").pack(side=ttk.LEFT)
+        name_conflict_combobox = ttk.Combobox(conflict_frame,
+                                            textvariable=self.name_conflict_var,
+                                            values=[item['display'] for item in self.lang["name_conflicts"]],
+                                            state="readonly")
+        name_conflict_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        name_conflict_combobox.bind('<<ComboboxSelected>>', lambda e: self.toggle_suffix_option_edit(suffix_option_combobox))
+        
+        # 后缀选项
+        suffix_frame = ttk.Frame(name_conflict_frame)
+        suffix_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(suffix_frame, text="后缀选项:").pack(side=ttk.LEFT)
+        suffix_option_combobox = ttk.Combobox(suffix_frame,
+                                            textvariable=self.suffix_option_var,
+                                            values=["数字", "时间戳", "随机字符串"],
+                                            state="readonly")
+        suffix_option_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        
+        # 界面设置标签页
+        ui_frame = ttk.Frame(notebook)
+        notebook.add(ui_frame, text="界面设置")
+        
+        # 语言设置
+        language_frame = ttk.LabelFrame(ui_frame, text="语言设置")
+        language_frame.pack(fill=ttk.X, padx=10, pady=5)
+        ttk.Label(language_frame, text="界面语言:").pack(side=ttk.LEFT, padx=5)
+        language_combobox = ttk.Combobox(language_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
+        language_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        
+        # 主题设置
+        theme_frame = ttk.LabelFrame(ui_frame, text="主题设置")
+        theme_frame.pack(fill=ttk.X, padx=10, pady=5)
+        
+        theme_select_frame = ttk.Frame(theme_frame)
+        theme_select_frame.pack(fill=ttk.X, padx=5, pady=5)
+        ttk.Label(theme_select_frame, text="界面主题:").pack(side=ttk.LEFT)
+        theme_var = ttk.StringVar(value=self.style.theme_use())
+        theme_combobox = ttk.Combobox(theme_select_frame, 
+                                     textvariable=theme_var,
+                                     values=["litera", "cosmo", "flatly", "darkly"],
+                                     state="readonly")
+        theme_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+        
+        # 其他界面设置
+        other_frame = ttk.LabelFrame(ui_frame, text="其他设置")
+        other_frame.pack(fill=ttk.X, padx=10, pady=5)
+        
+        auto_scroll_checkbox = ttk.Checkbutton(other_frame, 
+                                             text="自动滚动到最新文件", 
+                                             variable=self.auto_scroll_var)
+        auto_scroll_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+        
+        show_errors_checkbox = ttk.Checkbutton(other_frame, 
+                                             text="仅显示错误信息", 
+                                             variable=self.show_errors_only_var)
+        show_errors_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+        
+        # 关于标签页
+        about_frame = ttk.Frame(notebook)
+        notebook.add(about_frame, text="关于")
+        
+        # 软件信息
+        about_text = """
+QphotoRenamer 2.2
 
-        # 重命名样式设置
-        rename_pattern_frame = ttk.LabelFrame(main_frame, text=self.lang["rename_pattern_settings"], padding=10)
-        rename_pattern_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+一个简单易用的文件与照片批量重命名工具
 
-        ttk.Label(rename_pattern_frame, text=self.lang["rename_pattern"], anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        date_format_var = ttk.StringVar(value=self.date_format)
-        date_format_combobox = ttk.Combobox(rename_pattern_frame, textvariable=date_format_var, values=COMMON_DATE_FORMATS, state="readonly")
-        date_format_combobox.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+功能特点：
+• 支持拖拽文件/文件夹
+• 支持多种日期格式
+• 支持EXIF信息提取
+• 支持HEIC格式
+• 支持多语言
+• 支持快速添加模式
+• 支持文件名冲突处理
+• 支持撤销重命名
+• 支持自定义主题
 
-        ttk.Label(rename_pattern_frame, text=self.lang["prefix"], anchor='w').grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        prefix_entry = Entry(rename_pattern_frame, textvariable=self.prefix_var)
-        prefix_entry.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
+作者：QwejayHuang
+GitHub：https://github.com/Qwejay/QphotoRenamer
 
-        ttk.Label(rename_pattern_frame, text=self.lang["suffix"], anchor='w').grid(row=2, column=0, padx=5, pady=5, sticky='w')
-        suffix_entry = Entry(rename_pattern_frame, textvariable=self.suffix_var)
-        suffix_entry.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
+使用说明：
+1. 将文件或文件夹拖放到列表中
+2. 设置重命名格式和选项
+3. 点击"开始重命名"按钮
+4. 如需撤销，点击"撤销重命名"按钮
 
-        # 分割线
-        ttk.Separator(main_frame, orient='horizontal').grid(row=1, column=0, sticky="ew", pady=10)
-
-        # 文件处理设置
-        file_handling_frame = ttk.LabelFrame(main_frame, text=self.lang["file_handling_settings"], padding=10)
-        file_handling_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
-
-        ttk.Label(file_handling_frame, text=self.lang["skip_extensions"], anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        skip_ext_entry = Entry(file_handling_frame, textvariable=self.skip_extensions_var)
-        skip_ext_entry.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
-
-        # 命名冲突处理设置
-        ttk.Label(file_handling_frame, text=self.lang["name_conflict_prompt"], anchor='w').grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        name_conflict_combobox = ttk.Combobox(file_handling_frame, textvariable=self.name_conflict_var, values=[self.lang["add_suffix_option"], self.lang["keep_original_option"]], state="readonly")
-        name_conflict_combobox.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
-        # 绑定选项变化事件
-        name_conflict_combobox.bind("<<ComboboxSelected>>", lambda event: self.toggle_suffix_option_edit(suffix_option_combobox))
-
-        # 后缀选项设置
-        ttk.Label(file_handling_frame, text=self.lang["suffix_edit_label"], anchor='w').grid(row=2, column=0, padx=5, pady=5, sticky='w')
-        suffix_option_combobox = ttk.Combobox(file_handling_frame, textvariable=self.suffix_option_var, values=self.lang["suffix_options"], state="normal")
-        suffix_option_combobox.grid(row=2, column=1, padx=5, pady=5, sticky='ew')
-
-        # 初始状态：根据 name_conflict_var 的值设置后缀选项的编辑状态
-        self.toggle_suffix_option_edit(suffix_option_combobox)
-
-        # 分割线
-        ttk.Separator(main_frame, orient='horizontal').grid(row=3, column=0, sticky="ew", pady=10)
-
-        # 快速添加模式设置
-        fast_add_frame = ttk.LabelFrame(main_frame, text=self.lang["fast_add_mode"], padding=10)
-        fast_add_frame.grid(row=4, column=0, sticky="ew", padx=5, pady=5)
-
-        # 启用快速添加模式
-        fast_add_mode_checkbox = ttk.Checkbutton(
-            fast_add_frame,
-            text=self.lang["fast_add_mode"],
-            variable=self.fast_add_mode_var,
-            command=lambda: self.toggle_fast_add_threshold_entry(fast_add_threshold_entry)
-        )
-        fast_add_mode_checkbox.grid(row=0, column=0, padx=5, pady=5, sticky='w')
-
-        # 文件数量阈值
-        ttk.Label(fast_add_frame, text=self.lang["file_count"].format(""), anchor='w').grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        fast_add_threshold_entry = Entry(fast_add_frame, textvariable=self.fast_add_threshold_var, validate="key")
-        fast_add_threshold_entry.grid(row=1, column=1, padx=5, pady=5, sticky='ew')
-        # 限制输入为 1 到 500 的数字
-        fast_add_threshold_entry.config(validatecommand=(fast_add_threshold_entry.register(self.validate_threshold_input), "%P"))
-
-        # 初始状态：根据 fast_add_mode_var 的值设置输入框状态
-        self.toggle_fast_add_threshold_entry(fast_add_threshold_entry)
-
-        # 分割线
-        ttk.Separator(main_frame, orient='horizontal').grid(row=5, column=0, sticky="ew", pady=10)
-
-        # 其他设置
-        other_settings_frame = ttk.LabelFrame(main_frame, text=self.lang["other_settings"], padding=10)
-        other_settings_frame.grid(row=6, column=0, sticky="ew", padx=5, pady=5)
-
-        ttk.Label(other_settings_frame, text=self.lang["language"], anchor='w').grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        language_combobox = ttk.Combobox(other_settings_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
-        language_combobox.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
-        language_combobox.bind('<<ComboboxSelected>>', lambda event: self.set_language(language_combobox.get()))
-
+注意事项：
+• 请确保对目标文件夹有写入权限
+• 建议在重命名前备份重要文件
+• 快速添加模式可能会影响性能
+"""
+        about_label = ttk.Label(about_frame, text=about_text, justify=ttk.LEFT)
+        about_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
+        
         # 保存设置按钮
-        save_button = ttk.Button(main_frame, text=self.lang["save_settings"], command=lambda: self.save_settings(date_format_var.get(), self.language_var.get(), self.prefix_var.get(), self.suffix_var.get(), skip_ext_entry.get(), settings_window))
-        save_button.grid(row=7, column=0, sticky="ew", padx=5, pady=10)
-
-        # 调整列权重，使内容居中
-        main_frame.columnconfigure(0, weight=1)
-        rename_pattern_frame.columnconfigure(1, weight=1)
-        file_handling_frame.columnconfigure(1, weight=1)
-        fast_add_frame.columnconfigure(1, weight=1)
-        other_settings_frame.columnconfigure(1, weight=1)
+        save_button = ttk.Button(settings_window, text="保存设置", 
+                               command=lambda: self.save_settings(self.template_var.get(), 
+                                                               self.language_var.get(),
+                                                               "",  # 空前缀
+                                                               "",  # 空后缀
+                                                               self.skip_extensions_var.get(),
+                                                               settings_window,
+                                                               theme_var.get()))
+        save_button.pack(pady=10)
+        
+        # 调整列权重
+        template_frame.columnconfigure(0, weight=1)
+        date_frame.columnconfigure(0, weight=1)
+        file_frame.columnconfigure(0, weight=1)
+        ui_frame.columnconfigure(0, weight=1)
+        about_frame.columnconfigure(0, weight=1)
 
     def toggle_suffix_option_edit(self, suffix_option_combobox):
         """根据命名冲突处理方式启用或禁用后缀选项"""
@@ -614,78 +858,75 @@ class PhotoRenamer:
             return 1 <= int(value) <= 500
         return False
 
-    def save_settings(self, date_format, language, prefix, suffix, skip_extensions_input, settings_window):
-        """保存设置，使用缓存机制"""
-        # 验证日期格式
+    def save_settings(self, template, language, prefix, suffix, skip_extensions_input, settings_window, theme):
+        """保存设置到INI文件"""
         try:
-            datetime.datetime.now().strftime(date_format)
-        except ValueError:
-            messagebox.showerror("错误", "无效的日期格式！")
-            return
-        
-        # 更新设置
-        self.language_var.set(language)
-        self.set_language(language)
-        self.prefix_var.set(prefix)
-        self.suffix_var.set(suffix)
-        self.skip_extensions_var.set(skip_extensions_input)
-        self.date_format = date_format
-        
-        skip_ext_input = skip_extensions_input.strip().lower()
-        self.skip_extensions = ['.' + ext for ext in skip_ext_input.split()]
-        
-        # 构建配置字典
-        config = {
-            "language": language,
-            "date_format": date_format,
-            "prefix": prefix,
-            "suffix": suffix,
-            "skip_extensions": self.skip_extensions,
-            "date_basis": next(item['value'] for item in self.lang["date_bases"] if item['display'] == self.date_basis_var.get()),
-            "alternate_date_basis": next(item['value'] for item in self.lang["alternate_dates"] if item['display'] == self.alternate_date_var.get()),
-            "fast_add_mode": self.fast_add_mode_var.get(),
-            "fast_add_threshold": self.fast_add_threshold_var.get(),
-            "name_conflict": self.name_conflict_var.get(),
-            "suffix_option": self.suffix_option_var.get()
-        }
-        
-        # 更新缓存
-        self._settings_cache = {
-            'data': config,
-            'timestamp': datetime.datetime.now()
-        }
-        
-        # 保存到配置文件
-        with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
-        
-        # 更新UI
-        self.update_renamed_name_column()
-        settings_window.destroy()
+            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
+            
+            # 基本设置
+            config['General'] = {
+                'language': language,
+                'template': template.replace('%', '%%'),  # 转义%符号
+                'prefix': prefix,  # 保留前缀字段但不再使用
+                'suffix': suffix,  # 保留后缀字段但不再使用
+                'skip_extensions': skip_extensions_input
+            }
+            
+            # 日期设置
+            date_basis = next(item['value'] for item in self.lang["date_bases"] if item['display'] == self.date_basis_var.get())
+            alternate_date_basis = next(item['value'] for item in self.lang["alternate_dates"] if item['display'] == self.alternate_date_var.get())
+            config['Date'] = {
+                'date_basis': date_basis,
+                'alternate_date_basis': alternate_date_basis
+            }
+            
+            # 文件处理设置
+            name_conflict = next(item['value'] for item in self.lang["name_conflicts"] if item['display'] == self.name_conflict_var.get())
+            config['FileHandling'] = {
+                'fast_add_mode': str(self.fast_add_mode_var.get()),
+                'fast_add_threshold': str(self.fast_add_threshold_var.get()),
+                'name_conflict': name_conflict,
+                'suffix_option': self.suffix_option_var.get(),
+                'auto_scroll': str(self.auto_scroll_var.get()),
+                'show_errors_only': str(self.show_errors_only_var.get())
+            }
+            
+            # 界面设置
+            config['UI'] = {
+                'window_width': str(self.root.winfo_width()),
+                'window_height': str(self.root.winfo_height()),
+                'theme': theme
+            }
+            
+            # 保存到文件
+            with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
+                config.write(f)
+                
+            # 更新当前设置
+            self.template_var.set(template)
+            self.language_var.set(language)
+            # 前缀后缀已集成到模板中，不再单独设置
+            self.prefix_var.set(prefix)  # 保持变量兼容性
+            self.suffix_var.set(suffix)  # 保持变量兼容性
+            self.skip_extensions = skip_extensions_input.split()
+            self.skip_extensions_var.set(" ".join([ext[1:] for ext in self.skip_extensions]))
+            
+            # 更新语言
+            self.set_language(language)
+            
+            # 更新主题
+            self.style.theme_use(theme)
+            
+            # 关闭设置窗口
+            settings_window.destroy()
+            
+            # 显示成功消息
+            messagebox.showinfo("设置已保存", "设置已成功保存并应用")
+            
+        except Exception as e:
+            logging.error(f"保存设置时出错: {e}")
+            self.handle_error(e, "保存设置")
 
-    def load_settings(self):
-        """加载设置，使用缓存机制"""
-        # 检查配置缓存
-        if self._settings_cache:
-            if datetime.datetime.now() - self._settings_cache['timestamp'] < datetime.timedelta(minutes=5):
-                self._apply_settings(self._settings_cache['data'])
-                return
-
-        if os.path.exists("QphotoRenamer.ini"):
-            with open("QphotoRenamer.ini", "r", encoding="utf-8") as f:
-                try:
-                    config = json.load(f)
-                    # 检查编码问题
-                    self.fix_config_encoding(config)
-                    self._settings_cache = {
-                        'data': config,
-                        'timestamp': datetime.datetime.now()
-                    }
-                    self._apply_settings(config)
-                except Exception as e:
-                    logging.error(f"加载配置文件出错: {e}")
-                    self.handle_error(e, "加载配置文件")
-                    
     def fix_config_encoding(self, config: Dict):
         """修复配置文件中的编码问题"""
         # 检查语言设置是否需要修复
@@ -742,9 +983,12 @@ class PhotoRenamer:
         """应用设置"""
         try:
             self.language_var.set(config.get("language", "简体中文"))
-            self.date_format = config.get("date_format", "%Y%m%d_%H%M%S")
+            self.template_var = ttk.StringVar(value=config.get("template", "%Y%m%d_%H%M%S"))  # 加载模板设置
+            
+            # 保留前缀后缀变量以保持兼容性，但实际功能已集成到模板中
             self.prefix_var.set(config.get("prefix", ""))
             self.suffix_var.set(config.get("suffix", ""))
+            
             self.skip_extensions = config.get("skip_extensions", [])
             self.skip_extensions_var.set(" ".join([ext[1:] for ext in self.skip_extensions]))
             
@@ -823,7 +1067,7 @@ class PhotoRenamer:
                     
                 # 并行处理批次
                 with ThreadPoolExecutor(max_workers=8) as executor:  # 增加工作线程数
-                    futures = []
+                    futures = {}
                     for path, path_type in batch:
                         if self.stop_event.is_set():
                             break
@@ -1030,59 +1274,79 @@ class PhotoRenamer:
         Thread(target=process_updates, daemon=True).start()
 
     def set_language(self, language):
-        if language in LANGUAGES:
+        """设置界面语言"""
+        try:
+            # 更新语言变量
+            self.language_var.set(language)
+            
+            # 更新语言字典
             self.lang = LANGUAGES[language]
+            
+            # 更新窗口标题
             self.root.title(self.lang["window_title"])
-
-            # 更新带有 text_key 属性的控件的文本
+            
+            # 更新状态栏
+            self.update_status_bar("ready")
+            
+            # 更新所有界面文本
             def update_widget_text(widget):
-                if hasattr(widget, 'text_key') and widget.text_key in self.lang:
-                    widget.config(text=self.lang[widget.text_key])
-
-            # 递归遍历控件树并更新文本
+                if isinstance(widget, ttk.Label):
+                    for key, value in self.lang.items():
+                        if widget.cget("text") == value:
+                            widget.configure(text=value)
+                elif isinstance(widget, ttk.Button):
+                    for key, value in self.lang.items():
+                        if widget.cget("text") == value:
+                            widget.configure(text=value)
+                elif isinstance(widget, ttk.Checkbutton):
+                    for key, value in self.lang.items():
+                        if widget.cget("text") == value:
+                            widget.configure(text=value)
+                elif isinstance(widget, ttk.Radiobutton):
+                    for key, value in self.lang.items():
+                        if widget.cget("text") == value:
+                            widget.configure(text=value)
+                elif isinstance(widget, ttk.Combobox):
+                    if widget.cget("state") == "readonly":
+                        # 更新下拉选项
+                        if widget == self.date_basis_combobox:
+                            widget['values'] = [item['display'] for item in self.lang["date_bases"]]
+                            current_value = self.date_basis_var.get()
+                            if current_value in [item['value'] for item in self.lang["date_bases"]]:
+                                self.date_basis_var.set(next(item['display'] for item in self.lang["date_bases"] if item['value'] == current_value))
+                        elif widget == self.alternate_date_combobox:
+                            widget['values'] = [item['display'] for item in self.lang["alternate_dates"]]
+                            current_value = self.alternate_date_var.get()
+                            if current_value in [item['value'] for item in self.lang["alternate_dates"]]:
+                                self.alternate_date_var.set(next(item['display'] for item in self.lang["alternate_dates"] if item['value'] == current_value))
+                        elif widget == self.name_conflict_combobox:
+                            widget['values'] = [item['display'] for item in self.lang["name_conflicts"]]
+                            current_value = self.name_conflict_var.get()
+                            if current_value in [item['value'] for item in self.lang["name_conflicts"]]:
+                                self.name_conflict_var.set(next(item['display'] for item in self.lang["name_conflicts"] if item['value'] == current_value))
+            
             def traverse_widgets(widget):
                 update_widget_text(widget)
                 for child in widget.winfo_children():
                     traverse_widgets(child)
-
+            
+            # 更新所有界面元素
             traverse_widgets(self.root)
-
-            # 更新下拉框的选项和显示值
-            if hasattr(self, 'date_basis_combobox'):
-                self.date_basis_combobox['values'] = [item['display'] for item in self.lang["date_bases"]]
-                # 根据配置文件中的内部值设置显示值
-                if os.path.exists("QphotoRenamer.ini"):
-                    with open("QphotoRenamer.ini", "r", encoding="utf-8") as f:  # 指定编码为 utf-8
-                        config = json.load(f)
-                        internal_value = config.get("date_basis", "拍摄日期")
-                        for item in self.lang["date_bases"]:
-                            if item['value'] == internal_value:
-                                self.date_basis_combobox.set(item['display'])
-                                break
-                else:
-                    self.date_basis_combobox.set(self.lang["date_bases"][0]['display'])
-
-            if hasattr(self, 'alternate_date_combobox'):
-                self.alternate_date_combobox['values'] = [item['display'] for item in self.lang["alternate_dates"]]
-                # 根据配置文件中的内部值设置显示值
-                if os.path.exists("QphotoRenamer.ini"):
-                    with open("QphotoRenamer.ini", "r", encoding="utf-8") as f:  # 指定编码为 utf-8
-                        config = json.load(f)
-                        internal_value = config.get("alternate_date_basis", "修改日期")
-                        for item in self.lang["alternate_dates"]:
-                            if item['value'] == internal_value:
-                                self.alternate_date_combobox.set(item['display'])
-                                break
-                else:
-                    self.alternate_date_combobox.set(self.lang["alternate_dates"][0]['display'])
-
-            # 更新状态栏文本
-            self.status_label.config(text=self.lang["ready"])
-
-            # 更新 Treeview 的列标题
+            
+            # 更新表格列标题
             self.files_tree.heading('filename', text=self.lang["filename"])
-            self.files_tree.heading('status', text=self.lang["status"])
             self.files_tree.heading('renamed_name', text=self.lang["renamed_name"])
+            self.files_tree.heading('status', text=self.lang["status"])
+            
+            # 更新文件计数
+            self.update_file_count()
+            
+            # 更新重命名名称列
+            self.update_renamed_name_column()
+            
+        except Exception as e:
+            logging.error(f"设置语言时出错: {e}")
+            self.handle_error(e, "设置语言")
 
     def rename_photos(self):
         Thread(target=self.rename_photos_thread).start()
@@ -1209,23 +1473,86 @@ class PhotoRenamer:
             elif date_basis == "创建日期":
                 date_obj = self.get_file_creation_date(file_path)
 
-            # 如果成功获取日期，则格式化日期并过滤非法字符
+            # 获取模板
+            template = self.template_var.get() if hasattr(self, 'template_var') else "%Y%m%d_%H%M%S"
+            
+            # 替换模板中的变量
             if date_obj:
                 try:
-                    base_name = date_obj.strftime(self.date_format)
-                    base_name = self.sanitize_filename(base_name)  # 关键修复：过滤非法字符
+                    # 替换日期时间变量
+                    template = template.replace("%Y%m%d_%H%M%S", date_obj.strftime("%Y%m%d_%H%M%S"))
+                    template = template.replace("%Y-%m-%d %H:%M:%S", date_obj.strftime("%Y-%m-%d %H:%M:%S"))
+                    template = template.replace("%d-%m-%Y %H:%M:%S", date_obj.strftime("%d-%m-%Y %H:%M:%S"))
+                    template = template.replace("%Y%m%d", date_obj.strftime("%Y%m%d"))
+                    template = template.replace("%H%M%S", date_obj.strftime("%H%M%S"))
+                    template = template.replace("%Y-%m-%d", date_obj.strftime("%Y-%m-%d"))
+                    template = template.replace("%d-%m-%Y", date_obj.strftime("%d-%m-%Y"))
                 except Exception as e:
-                    logging.error(f"日期格式错误: {self.date_format}, 错误: {str(e)}")
-                    base_name = "INVALID_FORMAT"
+                    logging.error(f"日期格式错误: {template}, 错误: {str(e)}")
+                    template = "INVALID_FORMAT"
             else:
-                # 如果无法获取日期，则根据备用选项处理
-                if alternate_date_basis == "保留原名":
-                    return os.path.basename(file_path)  # 直接返回原文件名
+                template = template.replace("%Y%m%d_%H%M%S", "NO_DATE")
+                template = template.replace("%Y-%m-%d %H:%M:%S", "NO_DATE")
+                template = template.replace("%d-%m-%Y %H:%M:%S", "NO_DATE")
+                template = template.replace("%Y%m%d", "NO_DATE")
+                template = template.replace("%H%M%S", "NO_DATE")
+                template = template.replace("%Y-%m-%d", "NO_DATE")
+                template = template.replace("%d-%m-%Y", "NO_DATE")
+
+            # 替换其他变量
+            if exif_data:
+                # 相机型号
+                if 'Model' in exif_data:
+                    template = template.replace("%camera%", str(exif_data['Model']))
                 else:
-                    base_name = "NO_DATE"
+                    template = template.replace("%camera%", "Unknown")
+
+                # 镜头型号
+                if 'LensModel' in exif_data:
+                    template = template.replace("%lens%", str(exif_data['LensModel']))
+                else:
+                    template = template.replace("%lens%", "Unknown")
+
+                # ISO值
+                if 'ISOSpeedRatings' in exif_data:
+                    template = template.replace("%iso%", str(exif_data['ISOSpeedRatings']))
+                else:
+                    template = template.replace("%iso%", "Unknown")
+
+                # 光圈值
+                if 'FNumber' in exif_data:
+                    template = template.replace("%fnumber%", str(exif_data['FNumber']))
+                else:
+                    template = template.replace("%fnumber%", "Unknown")
+
+                # 快门速度
+                if 'ExposureTime' in exif_data:
+                    template = template.replace("%exposure%", str(exif_data['ExposureTime']))
+                else:
+                    template = template.replace("%exposure%", "Unknown")
+
+                # 图片尺寸
+                if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
+                    template = template.replace("%width%x%height%", 
+                                             f"{exif_data['ImageWidth']}x{exif_data['ImageHeight']}")
+                else:
+                    template = template.replace("%width%x%height%", "Unknown")
+
+            # 替换原文件名
+            template = template.replace("%original%", base_name)
+
+            # 替换序号（如果有）
+            if "%counter%" in template:
+                # 获取当前文件在列表中的位置
+                items = self.files_tree.get_children()
+                current_index = items.index(self.current_item) if hasattr(self, 'current_item') else 0
+                template = template.replace("%counter%", f"{current_index + 1:03d}")
+
+            # 过滤非法字符
+            template = self.sanitize_filename(template)
 
             # 生成最终名称
-            return f"{self.prefix_var.get()}{base_name}{self.suffix_var.get()}{ext}"
+            return f"{template}{ext}"
         except Exception as e:
             logging.error(f"生成新名称时发生错误: {str(e)}")
             return "ERROR_" + os.path.basename(file_path)
@@ -1849,6 +2176,282 @@ class PhotoRenamer:
         
         # 重新启用按钮
         self.start_button.config(state=ttk.NORMAL)
+
+class TemplateEditor(ttk.Frame):
+    def __init__(self, parent, template_var, prefix_var=None, suffix_var=None, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.template_var = template_var
+        self.prefix_var = prefix_var
+        self.suffix_var = suffix_var
+        self.config = configparser.ConfigParser()
+        self.config_file = 'QphotoRenamer.ini'
+        
+        # 初始化变量列表
+        self.variables = [
+            ("{date}", "日期"),
+            ("{time}", "时间"),
+            ("{camera}", "相机型号"),
+            ("{lens}", "镜头型号"),
+            ("{iso}", "ISO"),
+            ("{focal}", "焦距"),
+            ("{aperture}", "光圈"),
+            ("{shutter}", "快门")
+        ]
+        
+        # 初始化模板列表
+        self.templates = []
+        
+        # 设置UI
+        self.setup_ui()
+        
+        # 加载模板
+        self.load_templates()
+        
+        # 设置默认选中第一个模板
+        if self.templates:
+            self.template_combobox.set(self.templates[0])
+            self.set_template(self.templates[0])
+        # 如果有初始模板，设置它
+        elif self.template_var.get():
+            self.set_template(self.template_var.get())
+        
+    def setup_ui(self):
+        # 创建上下分栏
+        top_frame = ttk.Frame(self)
+        top_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        middle_frame = ttk.Frame(self)
+        middle_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        bottom_frame = ttk.Frame(self)
+        bottom_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 上部分：预设模板和模板编辑
+        # 预设模板区域
+        preset_frame = ttk.LabelFrame(top_frame, text="预设模板")
+        preset_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 创建下拉框
+        self.template_combobox = ttk.Combobox(preset_frame, values=self.templates, state="readonly")
+        self.template_combobox.pack(fill=ttk.X, padx=5, pady=5)
+        self.template_combobox.bind('<<ComboboxSelected>>', self.on_template_selected)
+        
+        # 模板编辑区域
+        edit_frame = ttk.LabelFrame(top_frame, text="模板编辑")
+        edit_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 添加按钮区域
+        button_frame = ttk.Frame(edit_frame)
+        button_frame.pack(fill=ttk.X, padx=5, pady=5)
+        
+        # 添加保存和读取按钮，放在最右边
+        save_button = ttk.Button(button_frame, text="保存", command=self.save_current_template, width=8)
+        save_button.pack(side=ttk.RIGHT, padx=2)
+        
+        clear_button = ttk.Button(button_frame, text="清空", command=self.clear_template, width=8)
+        clear_button.pack(side=ttk.RIGHT, padx=2)
+        
+        # 模板文本框
+        self.template_text = tk.Text(edit_frame, height=3, wrap=tk.WORD)
+        self.template_text.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        self.template_text.bind('<KeyRelease>', self.update_preview)
+        
+        # 中部分：变量按钮
+        variables_frame = ttk.LabelFrame(middle_frame, text="变量")
+        variables_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        self.create_variable_buttons(variables_frame, self.variables)
+        
+        # 下部分：预览区域
+        preview_frame = ttk.LabelFrame(bottom_frame, text="预览")
+        preview_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 创建并初始化preview_label
+        self.preview_label = ttk.Label(preview_frame, text="", wraplength=300)
+        self.preview_label.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+    def on_template_selected(self, event=None):
+        """当下拉框选择改变时触发"""
+        selected_template = self.template_combobox.get()
+        if selected_template:
+            self.set_template(selected_template)
+            
+    def update_template_combobox(self):
+        """更新下拉框的选项"""
+        self.template_combobox['values'] = self.templates
+        
+    def save_current_template(self):
+        """保存当前模板到预设中"""
+        current_template = self.template_text.get("1.0", END).strip()
+        if not current_template:
+            return
+            
+        # 将当前模板保存到第一个位置，其他模板依次后移
+        self.templates.insert(0, current_template)
+        self.templates = self.templates[:5]  # 只保留5条记录
+        
+        # 保存到配置文件
+        self.save_templates()
+        
+        # 更新下拉框
+        self.update_template_combobox()
+        
+    def load_templates(self):
+        """从配置文件加载模板"""
+        try:
+            # 尝试从配置文件加载模板
+            if self.config.has_section('Template'):
+                for i in range(1, 6):
+                    template_key = f'template{i}'
+                    if self.config.has_option('Template', template_key):
+                        template = self.config.get('Template', template_key)
+                        if template not in self.templates:
+                            self.templates.append(template)
+        except Exception as e:
+            print(f"加载模板失败: {e}")
+        
+        # 如果没有找到模板，使用默认模板
+        if not self.templates:
+            self.templates = [
+                # 基础模板：日期时间
+                "{date}_{time}",
+                # 专业模板：包含完整的拍摄参数
+                "{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}",
+                # 简单模板：日期时间相机型号
+                "{date}_{time}_{camera}",
+                # 设备模板：突出显示设备参数
+                "{camera}_{lens}_{iso}_{focal}_{aperture}",
+                # 完整模板：包含所有可用信息
+                "{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}"
+            ]
+        else:
+            # 确保{date}_{time}在第一位
+            default_template = "{date}_{time}"
+            if default_template in self.templates:
+                self.templates.remove(default_template)
+            self.templates.insert(0, default_template)
+            
+        # 更新下拉框的值
+        self.update_template_combobox()
+        
+    def save_templates(self):
+        """保存模板记录到配置文件"""
+        try:
+            if 'Template' not in self.config:
+                self.config['Template'] = {}
+                
+            # 保存模板到配置文件
+            for i, template in enumerate(self.templates, 1):
+                self.config['Template'][f'template{i}'] = template
+                
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                self.config.write(f)
+        except Exception as e:
+            print(f"保存模板记录时出错: {e}")
+            
+    def create_preset_buttons(self, parent, templates):
+        """创建预设模板按钮"""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 存储按钮和标签的引用
+        self.preset_buttons = []
+        self.preset_labels = []
+        
+        for i, template in enumerate(templates):
+            # 创建按钮容器
+            btn_frame = ttk.Frame(frame)
+            btn_frame.grid(row=i, column=0, sticky="ew", padx=5, pady=2)
+            
+            # 创建按钮
+            btn = ttk.Button(btn_frame, text=f"模板 {i+1}", 
+                           command=lambda t=template: self.set_template(t))
+            btn.pack(side=ttk.LEFT, padx=2)
+            self.preset_buttons.append(btn)
+            
+            # 创建标签
+            lbl = ttk.Label(btn_frame, text=template, foreground="gray")
+            lbl.pack(side=ttk.LEFT, padx=2)
+            self.preset_labels.append(lbl)
+            
+        # 使按钮水平方向填充
+        frame.columnconfigure(0, weight=1)
+        
+    def update_preset_buttons(self):
+        """更新预设按钮的文本"""
+        for i, (btn, lbl) in enumerate(zip(self.preset_buttons, self.preset_labels)):
+            if i < len(self.templates):
+                btn.configure(text=f"模板 {i+1}")
+                lbl.configure(text=self.templates[i])
+                
+    def set_template(self, template):
+        """设置模板内容"""
+        self.template_text.delete("1.0", END)
+        self.template_text.insert("1.0", template)
+        self.update_preview()
+        
+    def insert_variable(self, variable):
+        """插入变量到模板"""
+        self.template_text.insert(INSERT, variable)
+        self.update_preview()
+        
+    def update_preview(self, event=None):
+        """更新预览"""
+        template = self.template_text.get("1.0", END).strip()
+        self.template_var.set(template)
+        
+        # 创建预览文本
+        preview = template
+        preview = preview.replace("{date}", "20240315")
+        preview = preview.replace("{time}", "143022")
+        preview = preview.replace("{camera}", "Canon EOS R5")
+        preview = preview.replace("{lens}", "RF 24-70mm F2.8L")
+        preview = preview.replace("{iso}", "100")
+        preview = preview.replace("{focal}", "50mm")
+        preview = preview.replace("{aperture}", "f2.8")
+        preview = preview.replace("{shutter}", "1/125")
+        preview = preview.replace("{width}", "8192")
+        preview = preview.replace("{height}", "5464")
+        preview = preview.replace("{original}", "IMG_1234")
+        preview = preview.replace("{counter}", "001")
+        
+        self.preview_label.config(text=preview)
+        
+    def clear_template(self):
+        """清除模板内容"""
+        self.template_text.delete("1.0", END)
+        self.update_preview()
+        
+    def on_drop(self, event):
+        """处理拖放事件"""
+        self.template_text.insert(INSERT, event.data)
+        self.update_preview()
+        
+    def create_variable_buttons(self, parent, variables):
+        """创建变量按钮"""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 使用网格布局，每行4个按钮
+        for i, (var, desc) in enumerate(variables):
+            row = i // 4
+            col = i % 4
+            
+            # 创建按钮容器
+            btn_frame = ttk.Frame(frame)
+            btn_frame.grid(row=row, column=col, sticky="ew", padx=2, pady=2)
+            
+            # 创建按钮
+            btn = ttk.Button(btn_frame, text=desc, width=8,
+                           command=lambda v=var: self.insert_variable(v))
+            btn.pack(side=ttk.LEFT, padx=2)
+            
+            # 显示变量名称的标签
+            lbl = ttk.Label(btn_frame, text=var, foreground="gray", width=8)
+            lbl.pack(side=ttk.LEFT, padx=2)
+            
+        # 使按钮水平方向填充
+        for i in range(4):
+            frame.columnconfigure(i, weight=1)
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
