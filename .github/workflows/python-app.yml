@@ -51,7 +51,7 @@ jobs:
           name: QphotoRenamer-build
           path: dist/QphotoRenamer.exe
 
-      # 7. 获取最新 Release 版本号（如果没有则从 1.0.0 开始）
+      # 7. 获取最新 Release 版本号（修改后的 0.1 递增逻辑）
       - name: Get latest release version
         id: get_version
         uses: actions/github-script@v6
@@ -60,22 +60,21 @@ jobs:
             const response = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              per_page: 1, // 只获取最新的 Release
+              per_page: 1,
             });
             let version;
             if (response.data.length === 0) {
-              version = '1.0.0'; // 如果没有 Release，从 1.0.0 开始
+              version = '1.0'; // 初始版本改为 1.0
             } else {
               const latestTag = response.data[0].tag_name;
-              const versionMatch = latestTag.match(/^(\d+)\.(\d+)\.(\d+)$/);
+              // 匹配格式：可选的 v 前缀 + 数字.数字（允许结尾有其他字符但主要取前两部分）
+              const versionMatch = latestTag.match(/^v?(\d+)\.(\d+)/i);
               if (!versionMatch) {
-                version = '1.0.0'; // 如果 tag_name 不符合规范，从 1.0.0 开始
+                version = '1.0';
               } else {
-                // 递增版本号（例如 1.0.0 -> 1.0.1）
                 const major = parseInt(versionMatch[1], 10);
-                const minor = parseInt(versionMatch[2], 10);
-                const patch = parseInt(versionMatch[3], 10) + 1;
-                version = `${major}.${minor}.${patch}`;
+                const minor = parseInt(versionMatch[2], 10) + 1; // 递增次要版本
+                version = `${major}.${minor}`;
               }
             }
             // 使用环境文件设置输出
@@ -88,17 +87,16 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const tagName = '${{ steps.get_version.outputs.version }}'; // 使用动态生成的版本号
-            const releaseName = 'QphotoRenamer v' + tagName; // 设置 Release 名称
+            const tagName = '${{ steps.get_version.outputs.version }}';
+            const releaseName = 'QphotoRenamer v' + tagName;
             const response = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: tagName, // 使用生成的版本号作为 tag
-              name: releaseName, // 设置 Release 名称
+              tag_name: tagName,
+              name: releaseName,
               draft: false,
               prerelease: false,
             });
-            // 使用环境文件设置输出
             const fs = require('fs');
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `upload_url=${response.data.upload_url}\n`);
 
@@ -108,7 +106,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # 使用上一步生成的 Release URL
-          asset_path: dist/QphotoRenamer.exe # 上传的构建产物路径
-          asset_name: QphotoRenamer-v${{ steps.get_version.outputs.version }}.exe # 动态生成带版本号的文件名
-          asset_content_type: application/octet-stream # 设置文件类型
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: dist/QphotoRenamer.exe
+          asset_name: QphotoRenamer-v${{ steps.get_version.outputs.version }}.exe
+          asset_content_type: application/octet-stream
