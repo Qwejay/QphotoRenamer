@@ -1,50 +1,194 @@
 # QphotoRenamer
 
-QphotoRenamer 是一个简单易用的文件与照片批量重命名工具，支持根据拍摄日期、修改日期或创建日期重命名文件。
+QphotoRenamer 是一个简单易用的文件与照片批量重命名工具，支持根据拍摄日期、修改日期或创建日期重命名文件。它专为摄影爱好者和需要管理大量照片的用户设计，帮助您轻松整理各种文件，特别是照片和视频文件。
 
-## 主要功能
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/23af7394-725e-41ba-b416-737c47f231e8" alt="主界面" width="600">
+</p>
 
-- 支持拖放文件和文件夹
-- 支持多种日期格式重命名
-- 支持 HEIC 格式照片
-- 支持多语言（简体中文/English）
-- 支持快速添加模式
-- 支持文件名冲突处理
-- 支持撤销重命名
-- 支持查看文件 EXIF 信息
-- 支持自定义前缀和后缀
+## 🌟 主要功能
 
-## 安装依赖
+- **拖放支持**：直接拖拽文件或文件夹到程序界面
+- **多格式支持**：处理常见图片格式（JPG、PNG、HEIC等）和视频文件
+- **EXIF数据利用**：自动读取照片EXIF信息用于重命名
+- **自定义命名格式**：支持多种日期格式和变量组合
+- **双语界面**：支持简体中文和英文
+- **高效批处理**：优化的多线程处理，支持快速添加模式
+- **智能文件名冲突处理**：自动添加后缀或保留原文件名
+- **撤销功能**：支持撤销重命名操作
+- **文件信息查看**：查看照片的EXIF信息和详细信息
 
+## 📥 安装与运行
+
+### 环境要求
+- Python 3.6+
+- Windows/macOS/Linux
+
+### 使用源码运行
+
+1. 克隆仓库或下载源码
+```bash
+git clone https://github.com/Qwejay/QphotoRenamer.git
+cd QphotoRenamer
+```
+
+2. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-## 使用方法
+3. 运行程序
+```bash
+python QphotoRenamer.py
+```
 
-1. 运行程序：`python QphotoRenamer.py`
-2. 拖放文件或点击"添加文件"选择文件
-3. 在设置中配置重命名格式
-4. 点击"开始重命名"执行重命名操作
+### 使用预编译版本
 
-## 设置选项
+直接[下载最新版本](https://github.com/Qwejay/QphotoRenamer/releases)的可执行文件，无需安装，双击运行即可。
 
-- 重命名格式：支持多种日期格式
-- 日期基准：拍摄日期/修改日期/创建日期
-- 备用日期：当无法获取拍摄日期时的替代方案
-- 前缀/后缀：可自定义文件名前缀和后缀
-- 快速添加模式：批量添加文件时提高效率
-- 文件名冲突处理：自动添加后缀或保留原文件名
+## 🎯 使用方法
 
-## 快捷键
+### 基本操作
 
-- 双击文件：打开文件
-- 右键文件：移除文件
-- 点击文件名：查看 EXIF 信息
+1. **添加文件**：
+   - 点击"添加文件"按钮选择文件
+   - 或直接将文件/文件夹拖放到程序界面
 
-## 许可证
+2. **设置重命名格式**：
+   - 点击"设置"按钮打开设置窗口
+   - 在"重命名模板"标签页中自定义命名格式
 
-MIT License
+3. **开始重命名**：
+   - 点击"开始重命名"按钮执行重命名
+   - 状态栏会显示进度和结果
+
+4. **撤销操作**：
+   - 如果需要撤销，点击"撤销重命名"按钮
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/48b9365a-c6b3-426a-9fe1-57f08d71f548" alt="设置界面" width="600">
+</p>
+
+### 高级功能
+
+#### 自定义命名模板
+
+在设置中的"重命名模板"中，可以使用以下变量组合命名格式：
+- `{date}` - 日期（如20240101）
+- `{time}` - 时间（如120530）
+- `{camera}` - 相机型号
+- `{lens}` - 镜头型号
+- `{iso}` - ISO值
+- `{focal}` - 焦距
+- `{aperture}` - 光圈
+- `{shutter}` - 快门速度
+
+也可以使用标准的日期格式化字符：
+- `%Y` - 年份（四位数）
+- `%m` - 月份（两位数）
+- `%d` - 日期（两位数）
+- `%H` - 小时（24小时制）
+- `%M` - 分钟
+- `%S` - 秒数
+
+#### 快速添加模式
+
+当需要处理大量文件时，建议启用"快速添加模式"：
+
+1. 在设置中勾选"启用快速添加模式"
+2. 设置合适的文件数量阈值（默认10）
+3. 超过阈值的文件将快速添加而不立即读取EXIF数据
+
+#### 文件名冲突处理
+
+在设置中配置文件名冲突的处理方式：
+
+- **增加后缀**：自动添加数字后缀（如 "_001"、"_1"或" (1)"）
+- **保留原文件名**：不重命名已存在相同名称的文件
+
+#### 文件信息查看
+
+- 单击文件选中后右键可查看详细EXIF信息
+- 双击文件可直接打开源文件
+
+## ⚙️ 设置选项详解
+
+### 重命名模板
+自定义文件重命名的格式，支持日期、时间和EXIF信息变量。
+
+### 日期设置
+- **首选日期**：优先使用的日期类型（拍摄日期/修改日期/创建日期）
+- **备选日期**：当无法获取首选日期时使用的替代日期类型
+
+### 文件处理
+- **文件过滤**：设置需要跳过的文件扩展名
+- **名称冲突处理**：配置同名文件的处理方式
+- **性能优化**：快速添加模式设置
+
+### 界面设置
+- **语言选择**：简体中文/English
+- **其他设置**：自动滚动、错误显示等选项
+
+## 🔗 快捷操作
+
+- **文件列表右键菜单**：
+  - 查看文件EXIF信息
+  - 移除所选文件
+  - 打开文件位置
+
+- **快捷键**：
+  - `Delete`：从列表移除选中文件
+  - `双击`：打开选中文件
+
+## 📋 版本历史
+
+### 版本 2.2 (2024-03-31)
+- 代码优化，将全局变量重构为类变量，减少全局状态带来的问题
+- 添加类型注解，提高代码可读性和可维护性
+- 修复停止按钮无法停止操作的问题
+
+### 版本 2.0 (2024-12-29)
+- 新增快速添加模式，文件数量超过阈值时跳过文件状态的读取，提升加载速度
+- 新增文件名冲突处理选项，支持"增加后缀"或"保留原文件名"
+- 优化多线程处理功能，提升重命名效率，支持中途停止
+- 新增文件总数显示，状态栏实时更新文件数量
+- 新增文件处理队列，支持批量添加文件，后台逐步处理
+- 优化EXIF信息缓存，减少重复读取，提升性能
+- 优化状态栏显示，实时反馈文件加载状态
+- 修复文件重复添加、EXIF读取失败、文件名冲突处理等问题
+- 修复排除拓展名需要加"."才生效的问题
+
+[查看所有版本历史](https://github.com/Qwejay/QphotoRenamer/releases)
+
+## 🛠️ 开发构建
+
+### PyInstaller 打包
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --icon=icon.ico --add-data "QPhotoRenamer.ini;." --add-data "icon.ico;." --add-data "C:\Path\To\Python\Lib\site-packages\tkinterdnd2\tkdnd;tkdnd" --add-data "C:\Path\To\Python\Lib\site-packages\tkinterdnd2;tkinterdnd2" --name QPhotoRenamer QphotoRenamer.py
+```
+
+### Nuitka 打包
+
+```bash
+pip install nuitka
+nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=exifread --include-package=piexif --include-package=pillow_heif --include-package=ttkbootstrap --include-package=tkinterdnd2 --include-data-file=QphotoRenamer.ini=QphotoRenamer.ini --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico QphotoRenamer.py
+```
+
+## 📄 许可证
+
+MIT License © QwejayHuang
+
+## 🌟 致谢
+
+感谢所有使用和支持QphotoRenamer的用户，您的反馈和建议是我们不断改进的动力！
+
+## 🔗 相关链接
+
+- [GitHub仓库](https://github.com/Qwejay/QphotoRenamer)
+- [问题反馈](https://github.com/Qwejay/QphotoRenamer/issues)
+- [最新版本](https://github.com/Qwejay/QphotoRenamer/releases)
 
 ## 功能特性
 
