@@ -316,8 +316,7 @@ class PhotoRenamer:
                 # 界面设置
                 config['UI'] = {
                     'window_width': '850',
-                    'window_height': '700',
-                    'theme': 'litera'
+                    'window_height': '700'
                 }
                 
                 # 保存配置文件
@@ -385,10 +384,8 @@ class PhotoRenamer:
                 if 'UI' in config:
                     width = config['UI'].getint('window_width', 850)
                     height = config['UI'].getint('window_height', 600)
-                    theme = config['UI'].get('theme', 'litera')
                     
                     self.root.geometry(f"{width}x{height}")
-                    self.style.theme_use(theme)
                 
                 # 更新语言
                 self.set_language(self.language_var.get())
@@ -635,153 +632,154 @@ class PhotoRenamer:
 
     def open_settings(self):
         """打开设置窗口"""
-        settings_window = ttk.Toplevel(self.root)
-        settings_window.title(self.lang["settings"])
-        settings_window.geometry("800x600")  # 调整窗口大小
-        settings_window.resizable(True, True)  # 允许调整大小
-        settings_window.transient(self.root)  # 设置为主窗口的临时窗口
-        settings_window.grab_set()  # 模态窗口
-        
-        # 创建主框架
-        main_frame = ttk.Frame(settings_window)
-        main_frame.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-        
-        # 创建notebook
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 基本设置标签页
-        basic_frame = ttk.Frame(notebook)
-        notebook.add(basic_frame, text="基本设置")
-        
-        # 模板编辑器
-        template_frame = ttk.LabelFrame(basic_frame, text="重命名模板")
-        template_frame.pack(fill=ttk.X, padx=10, pady=5)
-        template_editor = TemplateEditor(template_frame, self.template_var)
-        template_editor.pack(fill=ttk.X, padx=5, pady=5)
-        
-        # 日期设置标签页
-        date_frame = ttk.Frame(notebook)
-        notebook.add(date_frame, text="日期设置")
-        
-        # 日期基准设置
-        date_basis_frame = ttk.LabelFrame(date_frame, text="日期基准")
-        date_basis_frame.pack(fill=ttk.X, padx=10, pady=5)
-        
-        # 主要日期基准
-        main_date_frame = ttk.Frame(date_basis_frame)
-        main_date_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(main_date_frame, text="主要日期基准:").pack(side=ttk.LEFT)
-        date_basis_combobox = ttk.Combobox(main_date_frame, 
-                                         textvariable=self.date_basis_var,
-                                         values=[item['display'] for item in self.lang["date_bases"]],
-                                         state="readonly")
-        date_basis_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        
-        # 备用日期
-        alternate_date_frame = ttk.Frame(date_basis_frame)
-        alternate_date_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(alternate_date_frame, text="无拍摄日期时:").pack(side=ttk.LEFT)
-        alternate_date_combobox = ttk.Combobox(alternate_date_frame, 
-                                             textvariable=self.alternate_date_var,
-                                             values=[item['display'] for item in self.lang["alternate_dates"]],
+        try:
+            # 创建设置窗口
+            settings_window = Toplevel(self.root)
+            settings_window.title(self.lang["settings"])
+            settings_window.geometry("600x650")
+            settings_window.resizable(True, True)
+            settings_window.transient(self.root)
+            settings_window.grab_set()
+            
+            # 创建主Notebook
+            notebook = ttk.Notebook(settings_window)
+            notebook.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
+            
+            # --------------------
+            # 重命名模板标签页
+            # --------------------
+            template_frame = ttk.Frame(notebook)
+            notebook.add(template_frame, text="重命名模板")
+            
+            # 添加模板编辑器
+            template_editor = TemplateEditor(template_frame, self.template_var)
+            template_editor.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
+            
+            # --------------------
+            # 日期设置标签页
+            # --------------------
+            date_frame = ttk.Frame(notebook)
+            notebook.add(date_frame, text="日期设置")
+            
+            # 日期基准设置
+            date_basis_frame = ttk.LabelFrame(date_frame, text="日期基准")
+            date_basis_frame.pack(fill=ttk.X, padx=10, pady=5)
+            
+            date_basis_select_frame = ttk.Frame(date_basis_frame)
+            date_basis_select_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(date_basis_select_frame, text="首选日期:").pack(side=ttk.LEFT)
+            date_basis_combobox = ttk.Combobox(date_basis_select_frame, 
+                                             textvariable=self.date_basis_var,
+                                             values=[item['display'] for item in self.lang["date_bases"]],
                                              state="readonly")
-        alternate_date_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        
-        # 文件处理标签页
-        file_frame = ttk.Frame(notebook)
-        notebook.add(file_frame, text="文件处理")
-        
-        # 快速添加模式
-        fast_add_frame = ttk.LabelFrame(file_frame, text="快速添加模式")
-        fast_add_frame.pack(fill=ttk.X, padx=10, pady=5)
-        
-        fast_add_checkbox = ttk.Checkbutton(fast_add_frame,
-                                          text="启用快速添加模式",
-                                          variable=self.fast_add_mode_var,
-                                          command=lambda: self.toggle_fast_add_threshold_entry(fast_add_threshold_entry))
-        fast_add_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-        
-        # 快速添加阈值
-        fast_add_threshold_frame = ttk.Frame(fast_add_frame)
-        fast_add_threshold_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(fast_add_threshold_frame, text="文件数量阈值:").pack(side=ttk.LEFT)
-        fast_add_threshold_entry = ttk.Entry(fast_add_threshold_frame,
-                                  textvariable=self.fast_add_threshold_var, 
-                                  validate="key", 
-                                  validatecommand=(self.root.register(self.validate_threshold_input), '%P'))
-        fast_add_threshold_entry.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        fast_add_threshold_entry.configure(state='disabled')
-        
-        # 文件名冲突处理
-        name_conflict_frame = ttk.LabelFrame(file_frame, text="文件名冲突处理")
-        name_conflict_frame.pack(fill=ttk.X, padx=10, pady=5)
-        
-        conflict_frame = ttk.Frame(name_conflict_frame)
-        conflict_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(conflict_frame, text="重命名后文件名冲突时:").pack(side=ttk.LEFT)
-        name_conflict_combobox = ttk.Combobox(conflict_frame,
-                                            textvariable=self.name_conflict_var,
-                                            values=[item['display'] for item in self.lang["name_conflicts"]],
-                                            state="readonly")
-        name_conflict_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        name_conflict_combobox.bind('<<ComboboxSelected>>', lambda e: self.toggle_suffix_option_edit(suffix_option_combobox))
-        
-        # 后缀选项
-        suffix_frame = ttk.Frame(name_conflict_frame)
-        suffix_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(suffix_frame, text="后缀选项:").pack(side=ttk.LEFT)
-        suffix_option_combobox = ttk.Combobox(suffix_frame,
-                                            textvariable=self.suffix_option_var,
-                                            values=["数字", "时间戳", "随机字符串"],
-                                            state="readonly")
-        suffix_option_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        
-        # 界面设置标签页
-        ui_frame = ttk.Frame(notebook)
-        notebook.add(ui_frame, text="界面设置")
-        
-        # 语言设置
-        language_frame = ttk.LabelFrame(ui_frame, text="语言设置")
-        language_frame.pack(fill=ttk.X, padx=10, pady=5)
-        ttk.Label(language_frame, text="界面语言:").pack(side=ttk.LEFT, padx=5)
-        language_combobox = ttk.Combobox(language_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
-        language_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        
-        # 主题设置
-        theme_frame = ttk.LabelFrame(ui_frame, text="主题设置")
-        theme_frame.pack(fill=ttk.X, padx=10, pady=5)
-        
-        theme_select_frame = ttk.Frame(theme_frame)
-        theme_select_frame.pack(fill=ttk.X, padx=5, pady=5)
-        ttk.Label(theme_select_frame, text="界面主题:").pack(side=ttk.LEFT)
-        theme_var = ttk.StringVar(value=self.style.theme_use())
-        theme_combobox = ttk.Combobox(theme_select_frame, 
-                                     textvariable=theme_var,
-                                     values=["litera", "cosmo", "flatly", "darkly"],
-                                     state="readonly")
-        theme_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-        
-        # 其他界面设置
-        other_frame = ttk.LabelFrame(ui_frame, text="其他设置")
-        other_frame.pack(fill=ttk.X, padx=10, pady=5)
-        
-        auto_scroll_checkbox = ttk.Checkbutton(other_frame, 
+            date_basis_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            alternate_date_select_frame = ttk.Frame(date_basis_frame)
+            alternate_date_select_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(alternate_date_select_frame, text="备选日期:").pack(side=ttk.LEFT)
+            alternate_date_combobox = ttk.Combobox(alternate_date_select_frame, 
+                                                 textvariable=self.alternate_date_var,
+                                                 values=[item['display'] for item in self.lang["alternate_dates"]],
+                                                 state="readonly")
+            alternate_date_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            # --------------------
+            # 文件处理标签页
+            # --------------------
+            file_frame = ttk.Frame(notebook)
+            notebook.add(file_frame, text="文件处理")
+            
+            # 文件过滤设置
+            filter_frame = ttk.LabelFrame(file_frame, text="文件过滤")
+            filter_frame.pack(fill=ttk.X, padx=10, pady=5)
+            
+            skip_extensions_frame = ttk.Frame(filter_frame)
+            skip_extensions_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(skip_extensions_frame, text="跳过的扩展名:").pack(side=ttk.LEFT)
+            skip_extensions_entry = ttk.Entry(skip_extensions_frame, textvariable=self.skip_extensions_var)
+            skip_extensions_entry.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            # 冲突处理设置
+            conflict_frame = ttk.LabelFrame(file_frame, text="名称冲突处理")
+            conflict_frame.pack(fill=ttk.X, padx=10, pady=5)
+            
+            conflict_select_frame = ttk.Frame(conflict_frame)
+            conflict_select_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(conflict_select_frame, text="冲突处理:").pack(side=ttk.LEFT)
+            name_conflict_combobox = ttk.Combobox(conflict_select_frame, 
+                                                textvariable=self.name_conflict_var,
+                                                values=[item['display'] for item in self.lang["name_conflicts"]],
+                                                state="readonly")
+            name_conflict_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            suffix_option_frame = ttk.Frame(conflict_frame)
+            suffix_option_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(suffix_option_frame, text="后缀格式:").pack(side=ttk.LEFT)
+            suffix_option_combobox = ttk.Combobox(suffix_option_frame, 
+                                                textvariable=self.suffix_option_var,
+                                                values=["_001", "_1", " (1)"],
+                                                state="readonly" if self.name_conflict_var.get() == "增加后缀" else "disabled")
+            suffix_option_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            # 绑定事件：当命名冲突选项改变时更新后缀选项
+            name_conflict_combobox.bind('<<ComboboxSelected>>', lambda e: self.toggle_suffix_option_edit(suffix_option_combobox))
+            
+            # 性能优化设置
+            performance_frame = ttk.LabelFrame(file_frame, text="性能优化")
+            performance_frame.pack(fill=ttk.X, padx=10, pady=5)
+            
+            fast_add_checkbox = ttk.Checkbutton(performance_frame, 
+                                             text="启用快速添加模式（适用于大量文件）", 
+                                             variable=self.fast_add_mode_var,
+                                             command=lambda: self.toggle_fast_add_threshold_entry(threshold_entry))
+            fast_add_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+            
+            threshold_frame = ttk.Frame(performance_frame)
+            threshold_frame.pack(fill=ttk.X, padx=5, pady=5)
+            ttk.Label(threshold_frame, text="文件数量阈值:").pack(side=ttk.LEFT)
+            
+            threshold_validate = (settings_window.register(self.validate_threshold_input), '%P')
+            threshold_entry = ttk.Entry(threshold_frame, 
+                                     textvariable=self.fast_add_threshold_var, 
+                                     width=5,
+                                     validate="key", 
+                                     validatecommand=threshold_validate,
+                                     state="normal" if self.fast_add_mode_var.get() else "disabled")
+            threshold_entry.pack(side=ttk.LEFT, padx=5)
+            
+            # --------------------
+            # 界面设置标签页
+            # --------------------
+            ui_frame = ttk.Frame(notebook)
+            notebook.add(ui_frame, text="界面设置")
+            
+            # 语言设置
+            language_frame = ttk.LabelFrame(ui_frame, text="语言设置")
+            language_frame.pack(fill=ttk.X, padx=10, pady=5)
+            ttk.Label(language_frame, text="界面语言:").pack(side=ttk.LEFT, padx=5)
+            language_combobox = ttk.Combobox(language_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
+            language_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
+            
+            # 其他界面设置
+            other_frame = ttk.LabelFrame(ui_frame, text="其他设置")
+            other_frame.pack(fill=ttk.X, padx=10, pady=5)
+            
+            auto_scroll_checkbox = ttk.Checkbutton(other_frame, 
                                              text="自动滚动到最新文件", 
                                              variable=self.auto_scroll_var)
-        auto_scroll_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-        
-        show_errors_checkbox = ttk.Checkbutton(other_frame, 
+            auto_scroll_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+            
+            show_errors_checkbox = ttk.Checkbutton(other_frame, 
                                              text="仅显示错误信息", 
                                              variable=self.show_errors_only_var)
-        show_errors_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-        
-        # 关于标签页
-        about_frame = ttk.Frame(notebook)
-        notebook.add(about_frame, text="关于")
-        
-        # 软件信息
-        about_text = """
+            show_errors_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
+            
+            # 关于标签页
+            about_frame = ttk.Frame(notebook)
+            notebook.add(about_frame, text="关于")
+            
+            # 软件信息
+            about_text = """
 QphotoRenamer 2.2
 
 一个简单易用的文件与照片批量重命名工具
@@ -795,7 +793,6 @@ QphotoRenamer 2.2
 • 支持快速添加模式
 • 支持文件名冲突处理
 • 支持撤销重命名
-• 支持自定义主题
 
 作者：QwejayHuang
 GitHub：https://github.com/Qwejay/QphotoRenamer
@@ -811,26 +808,29 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
 • 建议在重命名前备份重要文件
 • 快速添加模式可能会影响性能
 """
-        about_label = ttk.Label(about_frame, text=about_text, justify=ttk.LEFT)
-        about_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-        
-        # 保存设置按钮
-        save_button = ttk.Button(settings_window, text="保存设置", 
+            about_label = ttk.Label(about_frame, text=about_text, justify=ttk.LEFT)
+            about_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
+            
+            # 保存设置按钮
+            save_button = ttk.Button(settings_window, text="保存设置", 
                                command=lambda: self.save_settings(self.template_var.get(), 
                                                                self.language_var.get(),
                                                                "",  # 空前缀
                                                                "",  # 空后缀
                                                                self.skip_extensions_var.get(),
-                                                               settings_window,
-                                                               theme_var.get()))
-        save_button.pack(pady=10)
-        
-        # 调整列权重
-        template_frame.columnconfigure(0, weight=1)
-        date_frame.columnconfigure(0, weight=1)
-        file_frame.columnconfigure(0, weight=1)
-        ui_frame.columnconfigure(0, weight=1)
-        about_frame.columnconfigure(0, weight=1)
+                                                               settings_window))
+            save_button.pack(pady=10)
+            
+            # 调整列权重
+            template_frame.columnconfigure(0, weight=1)
+            date_frame.columnconfigure(0, weight=1)
+            file_frame.columnconfigure(0, weight=1)
+            ui_frame.columnconfigure(0, weight=1)
+            about_frame.columnconfigure(0, weight=1)
+            
+        except Exception as e:
+            logging.error(f"打开设置窗口时出错: {e}")
+            self.handle_error(e, "打开设置窗口")
 
     def toggle_suffix_option_edit(self, suffix_option_combobox):
         """根据命名冲突处理方式启用或禁用后缀选项"""
@@ -858,7 +858,7 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             return 1 <= int(value) <= 500
         return False
 
-    def save_settings(self, template, language, prefix, suffix, skip_extensions_input, settings_window, theme):
+    def save_settings(self, template, language, prefix, suffix, skip_extensions_input, settings_window):
         """保存设置到INI文件"""
         try:
             config = configparser.ConfigParser(interpolation=None)  # 禁用插值
@@ -894,8 +894,7 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             # 界面设置
             config['UI'] = {
                 'window_width': str(self.root.winfo_width()),
-                'window_height': str(self.root.winfo_height()),
-                'theme': theme
+                'window_height': str(self.root.winfo_height())
             }
             
             # 保存到文件
@@ -913,9 +912,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             
             # 更新语言
             self.set_language(language)
-            
-            # 更新主题
-            self.style.theme_use(theme)
             
             # 关闭设置窗口
             settings_window.destroy()
@@ -1023,22 +1019,60 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         self.add_files_to_queue(paths)
 
     def add_files_to_queue(self, paths):
+        # 重置停止事件，确保可以处理新的队列
+        self.stop_event.clear()
+        
+        # 显示状态提示
+        self.root.after(0, lambda: self.update_status_bar("开始处理文件..."))
+        
+        # 创建分批计数器，避免一次添加太多文件导致UI卡顿
+        batch_count = 0
+        batch_size = 100
+        
         for path in paths:
+            # 如果用户点击了停止按钮，则中断添加
+            if self.stop_event.is_set():
+                self.root.after(0, lambda: self.update_status_bar("操作已停止"))
+                return
+                
             path = path.strip().strip('{}')
             if os.path.isfile(path):
-                if not any(path == self.files_tree.item(item, 'values')[0] for item in self.files_tree.get_children()):
+                # 检查文件是否已存在于列表中
+                is_duplicate = False
+                for item in self.files_tree.get_children():
+                    if path == self.files_tree.item(item, 'values')[0]:
+                        is_duplicate = True
+                        break
+                        
+                if not is_duplicate:
                     self.file_queue.put((path, 'file'))
+                    batch_count += 1
             elif os.path.isdir(path):
                 self.file_queue.put((path, 'dir'))
-
-        if not self.processing_thread or not self.processing_thread.is_alive():
+                batch_count += 1
+            
+            # 每添加一定数量的文件，更新一次状态栏
+            if batch_count % 10 == 0:
+                self.root.after(0, lambda count=batch_count: self.update_status_bar(f"已添加 {count} 个文件/目录到队列..."))
+                # 允许UI更新，避免卡顿
+                self.root.update_idletasks()
+            
+            # 如果积累了太多文件，先开始处理一部分
+            if batch_count >= batch_size and (not self.processing_thread or (self.processing_thread and not self.processing_thread.is_alive())):
+                self.root.after(0, lambda: self.update_status_bar(f"开始处理前 {batch_count} 个文件..."))
+                self.processing_thread = Thread(target=self.process_files_from_queue, daemon=True)
+                self.processing_thread.start()
+                batch_count = 0
+        
+        # 如果有剩余文件需要处理，并且处理线程没有运行，则启动处理线程
+        if batch_count > 0 and (not self.processing_thread or (self.processing_thread and not self.processing_thread.is_alive())):
             self.processing_thread = Thread(target=self.process_files_from_queue, daemon=True)
             self.processing_thread.start()
 
     def process_files_from_queue(self):
         """处理文件队列，使用批量处理和并行处理"""
         try:
-            batch_size = 20  # 增加批处理大小，提高处理效率
+            batch_size = 10  # 降低批处理大小，减少内存消耗
             while not self.file_queue.empty():
                 # 检查是否设置了停止事件
                 if self.stop_event.is_set():
@@ -1066,8 +1100,8 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 self.root.after(0, lambda: self.update_status_bar(f"正在处理文件...（队列中还有{self.file_queue.qsize()}个文件待处理）"))
                     
                 # 并行处理批次
-                with ThreadPoolExecutor(max_workers=8) as executor:  # 增加工作线程数
-                    futures = {}
+                with ThreadPoolExecutor(max_workers=4) as executor:  # 减少工作线程数，避免内存过载
+                    futures = []  # 使用列表
                     for path, path_type in batch:
                         if self.stop_event.is_set():
                             break
@@ -1104,6 +1138,9 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                         self.handle_error(e, "更新UI")
                 
                 self.root.after(0, update_ui)
+                
+                # 添加短暂延迟以避免UI无响应
+                self.root.update_idletasks()
 
             # 所有文件加载完成后更新状态栏
             if not self.stop_event.is_set():
@@ -1117,19 +1154,45 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
     def process_directory(self, dir_path: str):
         """处理目录，使用生成器减少内存使用"""
         try:
+            file_count = 0
+            max_files_per_batch = 50  # 每批次最多处理的文件数
+            file_batch = []
+            
             for root, _, files in os.walk(dir_path):
                 # 检查是否设置了停止事件
                 if self.stop_event.is_set():
                     return
-                    
+                
                 for file in files:
                     # 再次检查是否设置了停止事件
                     if self.stop_event.is_set():
                         return
-                        
+                    
                     file_path = os.path.join(root, file)
-                    # 获取文件状态和名称，然后在主线程中更新UI
-                    self.add_file_to_list(file_path)
+                    file_batch.append(file_path)
+                    file_count += 1
+                    
+                    # 当收集到足够数量的文件时，将它们添加到队列中批量处理
+                    if len(file_batch) >= max_files_per_batch:
+                        for path in file_batch:
+                            self.file_queue.put((path, 'file'))
+                        file_batch = []
+                        
+                        # 更新状态栏，显示处理进度
+                        self.root.after(0, lambda count=file_count: self.update_status_bar(f"已找到 {count} 个文件..."))
+                        
+                        # 允许UI更新，避免卡顿
+                        self.root.update_idletasks()
+            
+            # 处理剩余的文件
+            for path in file_batch:
+                if self.stop_event.is_set():
+                    return
+                self.file_queue.put((path, 'file'))
+            
+            # 最终更新状态栏
+            self.root.after(0, lambda count=file_count: self.update_status_bar(f"目录 {os.path.basename(dir_path)} 中找到 {count} 个文件"))
+            
         except Exception as e:
             logging.error(f"处理目录时出错: {dir_path}, 错误: {e}")
             self.handle_error(e, f"处理目录: {dir_path}")
@@ -2144,30 +2207,42 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
     # 添加新方法
     def stop_all_operations(self):
         """停止所有操作，包括文件加载、重命名等"""
+        # 立即设置停止标志
         self.stop_event.set()
+        
+        # 更新UI状态
+        self.root.after(0, lambda: self.update_status_bar("正在停止操作..."))
+        self.status_label.config(text="正在停止操作，请稍候...")
+        self.root.update_idletasks()  # 立即更新UI以反馈用户操作
         
         # 取消所有待处理的UI更新
         if self._update_timer:
             self.root.after_cancel(self._update_timer)
             self._update_timer = None
         
-        # 清空文件队列
-        while not self.file_queue.empty():
-            try:
-                self.file_queue.get(block=False)
-            except:
-                pass
-        
-        # 更新UI状态
-        self.root.after(0, lambda: self.update_status_bar("操作已停止"))
-        
-        # 如果有正在运行的线程，等待它们结束
+        # 清空文件队列 - 使用无阻塞方式
+        try:
+            while True:
+                self.file_queue.get_nowait()
+        except:
+            pass
+            
+        # 如果有正在运行的线程，设置超时等待
         if self.processing_thread and self.processing_thread.is_alive():
-            # 不阻塞UI，线程会自行检查 stop_event 并退出
-            self.status_label.config(text="正在停止操作，请稍候...")
-        
-        # 重置停止事件，为下一次操作做准备
-        self.root.after(1000, self.reset_stop_event)
+            # 使用after方法检查线程状态，避免阻塞UI
+            self.root.after(500, self._check_thread_status)
+        else:
+            # 如果没有活动线程，立即重置状态
+            self.root.after(100, self.reset_stop_event)
+    
+    def _check_thread_status(self):
+        """检查处理线程状态"""
+        if self.processing_thread and self.processing_thread.is_alive():
+            # 线程仍在运行，再次调度检查
+            self.root.after(500, self._check_thread_status)
+        else:
+            # 线程已结束，重置状态
+            self.root.after(0, self.reset_stop_event)
     
     def reset_stop_event(self):
         """重置停止事件"""
@@ -2176,6 +2251,9 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         
         # 重新启用按钮
         self.start_button.config(state=ttk.NORMAL)
+        
+        # 允许UI更新
+        self.root.update_idletasks()
 
 class TemplateEditor(ttk.Frame):
     def __init__(self, parent, template_var, prefix_var=None, suffix_var=None, **kwargs):
