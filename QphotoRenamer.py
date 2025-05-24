@@ -1431,11 +1431,23 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             # 规范化所有文件路径
             normalized_paths = []
             for path in paths:
-                # 转换为绝对路径
-                abs_path = os.path.abspath(path)
-                # 规范化路径
-                norm_path = os.path.normpath(abs_path)
-                normalized_paths.append(norm_path)
+                try:
+                    # 转换为绝对路径
+                    abs_path = os.path.abspath(path)
+                    # 规范化路径
+                    norm_path = os.path.normpath(abs_path)
+                    # 检查文件是否存在
+                    if os.path.exists(norm_path):
+                        normalized_paths.append(norm_path)
+                    else:
+                        logging.warning(f"文件不存在，已跳过: {norm_path}")
+                except Exception as e:
+                    logging.error(f"处理文件路径时出错: {path}, 错误: {e}")
+                    continue
+            
+            if not normalized_paths:
+                self.update_status_bar("no_valid_files")
+                return
             
             # 禁用开始按钮，启用停止按钮
             self.start_button.config(state=ttk.DISABLED)
@@ -1473,28 +1485,38 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
     def process_files_from_queue(self):
         """处理文件队列中的文件"""
         try:
+            processed_count = 0
+            total_files = self.file_queue.qsize()
+            
             while not self.file_queue.empty() and not self.stop_event.is_set():
                 path, path_type = self.file_queue.get()
                 
-                if path_type == 'file':
-                    # 检查文件是否已存在
-                    is_duplicate = False
-                    for item in self.files_tree.get_children():
-                        current_path = self.files_tree.item(item)['values'][0]
-                        if path == current_path:
-                            is_duplicate = True
-                            break
+                try:
+                    if path_type == 'file':
+                        # 检查文件是否已存在
+                        is_duplicate = False
+                        for item in self.files_tree.get_children():
+                            current_path = self.files_tree.item(item)['values'][0]
+                            if path == current_path:
+                                is_duplicate = True
+                                break
+                                
+                        if not is_duplicate:
+                            # 添加文件到列表
+                            self.add_file_to_list(path)
+                            processed_count += 1
                             
-                    if not is_duplicate:
-                        # 添加文件到列表
-                        self.add_file_to_list(path)
+                    elif path_type == 'directory':
+                        # 处理目录
+                        self.process_directory(path)
                         
-                elif path_type == 'directory':
-                    # 处理目录
-                    self.process_directory(path)
+                    # 更新状态栏
+                    self.root.after(0, lambda: self.update_status_bar("processing_files", 
+                        self.file_queue.qsize(), processed_count, total_files))
                     
-                # 更新状态栏
-                self.root.after(0, lambda: self.update_status_bar("processing_files", self.file_queue.qsize()))
+                except Exception as e:
+                    logging.error(f"处理文件时出错: {path}, 错误: {e}")
+                    continue
                 
             # 所有文件处理完成后
             if not self.stop_event.is_set():
