@@ -22,12 +22,12 @@ import configparser
 import tkinter as tk
 import gc
 import time
-import multiprocessing  # 新增
-import shutil  # 添加shutil模块导入
-import queue  # 添加queue模块导入
-import threading  # 添加threading模块导入
+import multiprocessing 
+import shutil
+import queue
+import threading 
 
-# 获取当前脚本所在的目录路径
+
 base_path = os.path.dirname(os.path.abspath(__file__))
 icon_path = os.path.join(base_path, 'icon.ico')
 
@@ -397,160 +397,117 @@ class PhotoRenamer:
             self.root.destroy()
 
     def load_or_create_settings(self):
-        """加载或创建配置文件"""
         try:
-            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
-            
-            # 检查配置文件是否存在
-            if not os.path.exists("QphotoRenamer.ini"):
-                logging.info("配置文件不存在，创建默认配置")
-                # 创建默认配置
-                config['General'] = {
-                    'language': '简体中文',
-                    'prefix': '',
-                    'suffix': '',
-                    'skip_extensions': ''
+            if not os.path.exists(self.config_file):
+                config = {
+                    'General': {
+                        'language': 'zh_CN',
+                        'prefix': '',
+                        'suffix': '',
+                        'skip_extensions': '.txt,.log',
+                        'fast_add_threshold': '100'
+                    },
+                    'Template': {
+                        'default_template': '{date}_{time}',
+                        'template1': '{date}_{time}',
+                        'template2': '{date}_{time}_{camera}',
+                        'template3': '{date}_{time}_{location}',
+                        'template4': '{date}_{time}_{description}',
+                        'template5': '{date}_{time}_{camera}_{location}'
+                    }
                 }
-                
-                config['Date'] = {
-                    'date_basis': '拍摄日期',
-                    'alternate_date_basis': '修改日期'
-                }
-                
-                config['FileHandling'] = {
-                    'fast_add_mode': 'false',
-                    'fast_add_threshold': '10',
-                    'name_conflict': 'add_suffix',
-                    'suffix_option': '_001',
-                    'auto_scroll': 'true',
-                    'show_errors_only': 'false'
-                }
-                
-                config['UI'] = {
-                    'window_width': '850',
-                    'window_height': '700'
-                }
-                
-                config['Cache'] = {
-                    'exif_cache_size': '1000',
-                    'status_cache_size': '1000',
-                    'file_hash_cache_size': '1000'
-                }
-                
-                config['Template'] = {
-                    'default_template': '%Y%m%d_%H%M%S',
-                    'template1': '%Y%m%d_%H%M%S',
-                    'template2': '%Y%m%d_%H%M%S_{camera}_{lens}_{iso}_{focal}_{aperture}',
-                    'template3': '%Y%m%d_%H%M%S_{camera}',
-                    'template4': '{camera}_{lens}_{iso}_{focal}_{aperture}',
-                    'template5': '{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}'
-                }
-                
-                # 保存配置文件
                 try:
-                    with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
-                        config.write(f)
+                    with open(self.config_file, 'w', encoding='utf-8') as f:
+                        json.dump(config, f, indent=4)
                     logging.info("默认配置文件创建成功")
                 except Exception as e:
-                    logging.error(f"创建默认配置文件失败: {e}")
+                    logging.error(f"创建配置文件失败: {e}")
                     raise
             else:
-                logging.info("配置文件已存在，加载现有配置")
-            
-            # 加载配置
-            self.load_settings()
-                
+                try:
+                    with open(self.config_file, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                except Exception as e:
+                    logging.error(f"读取配置文件失败: {e}")
+                    raise
         except Exception as e:
-            logging.error(f"加载或创建设置时出错: {e}")
-            self.handle_error(e, "加载或创建设置")
+            logging.error(f"加载或创建配置文件失败: {e}")
+            raise
 
     def load_settings(self):
-        """从INI文件加载设置"""
         try:
-            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
-            if not os.path.exists("QphotoRenamer.ini"):
-                logging.warning("配置文件不存在，使用默认设置")
-                return
-            try:
-                config.read("QphotoRenamer.ini", encoding="utf-8")
-            except Exception as e:
-                logging.error(f"读取配置文件失败: {e}，尝试恢复默认配置")
-                # 自动恢复默认配置
-                os.remove("QphotoRenamer.ini")
-                self.load_or_create_settings()
-                return
-            
-            # 加载基本设置
-            if 'General' in config:
-                try:
-                    self.language_var.set(config['General'].get('language', '简体中文'))
-                    self.prefix_var.set(config['General'].get('prefix', ''))
-                    self.suffix_var.set(config['General'].get('suffix', ''))
-                    skip_extensions = config['General'].get('skip_extensions', '')
-                    self.skip_extensions = skip_extensions.split()
-                    self.skip_extensions_var.set(" ".join([ext[1:] for ext in self.skip_extensions]))
-                except Exception as e:
-                    logging.error(f"加载基本设置失败: {e}")
-            
-            # 加载模板设置
-            if 'Template' in config:
-                try:
-                    # 加载默认模板
-                    default_template = config['Template'].get('default_template', '%Y%m%d_%H%M%S')
+            if os.path.exists(self.config_file):
+                self.config.read(self.config_file, encoding='utf-8')
+                
+                if 'General' in self.config:
+                    self.language_var.set(self.config['General'].get('language', 'zh_CN'))
+                    self.prefix_var.set(self.config['General'].get('prefix', ''))
+                    self.suffix_var.set(self.config['General'].get('suffix', ''))
+                    self.skip_extensions_var.set(self.config['General'].get('skip_extensions', '.txt,.log'))
+                    self.fast_add_threshold_var.set(self.config['General'].get('fast_add_threshold', '100'))
+                
+                if 'Template' in self.config:
+                    default_template = self.config['Template'].get('default_template', '{date}_{time}')
                     self.template_var.set(default_template)
                     
-                    # 加载其他模板
-                    templates = []
-                    for i in range(1, 6):  # 最多加载5个模板
-                        template_key = f'template{i}'
-                        if config['Template'].has_option(template_key):
-                            template = config['Template'].get(template_key)
-                            if template not in templates:
-                                templates.append(template)
+                    self.templates = []
+                    for i in range(1, 6):
+                        template = self.config['Template'].get(f'template{i}')
+                        if template:
+                            self.templates.append(template)
                     
-                    # 如果没有找到任何模板，使用默认模板
-                    if not templates:
-                        templates = [
-                            '%Y%m%d_%H%M%S',
-                            '%Y%m%d_%H%M%S_{camera}_{lens}_{iso}_{focal}_{aperture}',
-                            '%Y%m%d_%H%M%S_{camera}',
-                            '{camera}_{lens}_{iso}_{focal}_{aperture}',
-                            '{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}'
+                    if not self.templates:
+                        self.templates = [
+                            '{date}_{time}',
+                            '{date}_{time}_{camera}',
+                            '{date}_{time}_{location}',
+                            '{date}_{time}_{description}',
+                            '{date}_{time}_{camera}_{location}'
                         ]
-                    
-                    # 更新模板列表
-                    if hasattr(self, 'template_editor'):
-                        self.template_editor.templates = templates
-                        self.template_editor.update_template_combobox()
-                except Exception as e:
-                    logging.error(f"加载模板设置失败: {e}")
             
-            # 加载日期设置
-            if 'Date' in config:
+            if 'Date' in self.config:
                 try:
-                    date_basis = config['Date'].get('date_basis', '拍摄日期')
-                    alternate_date_basis = config['Date'].get('alternate_date_basis', '修改日期')
+                    date_basis = self.config['Date'].get('date_basis', '拍摄日期')
+                    alternate_date_basis = self.config['Date'].get('alternate_date_basis', '修改日期')
                     self.date_basis_var.set(next(item['display'] for item in self.lang["date_bases"] if item['value'] == date_basis))
                     self.alternate_date_var.set(next(item['display'] for item in self.lang["alternate_dates"] if item['value'] == alternate_date_basis))
                 except Exception as e:
                     logging.error(f"加载日期设置失败: {e}")
             
-            # 加载文件处理设置
-            if 'FileHandling' in config:
+            if 'FileHandling' in self.config:
                 try:
-                    self.fast_add_mode_var.set(config['FileHandling'].getboolean('fast_add_mode', False))
-                    self.fast_add_threshold_var.set(config['FileHandling'].getint('fast_add_threshold', 10))
-                    name_conflict = config['FileHandling'].get('name_conflict', 'add_suffix')
+                    self.fast_add_mode_var.set(self.config['FileHandling'].getboolean('fast_add_mode', False))
+                    self.fast_add_threshold_var.set(self.config['FileHandling'].getint('fast_add_threshold', 10))
+                    name_conflict = self.config['FileHandling'].get('name_conflict', 'add_suffix')
                     self.name_conflict_var.set(next(item['display'] for item in self.lang["name_conflicts"] if item['value'] == name_conflict))
-                    self.suffix_option_var.set(config['FileHandling'].get('suffix_option', '_001'))
-                    self.auto_scroll_var.set(config['FileHandling'].getboolean('auto_scroll', True))
-                    self.show_errors_only_var.set(config['FileHandling'].getboolean('show_errors_only', False))
+                    self.suffix_option_var.set(self.config['FileHandling'].get('suffix_option', '_001'))
+                    self.auto_scroll_var.set(self.config['FileHandling'].getboolean('auto_scroll', True))
+                    self.show_errors_only_var.set(self.config['FileHandling'].getboolean('show_errors_only', False))
                 except Exception as e:
                     logging.error(f"加载文件处理设置失败: {e}")
-                    
+            
+            if 'UI' in self.config:
+                try:
+                    window_width = self.config['UI'].getint('window_width', 850)
+                    window_height = self.config['UI'].getint('window_height', 700)
+                    self.root.geometry(f"{window_width}x{window_height}")
+                except Exception as e:
+                    logging.error(f"加载UI设置失败: {e}")
+            
+            if 'Cache' in self.config:
+                try:
+                    exif_cache_size = self.config['Cache'].getint('exif_cache_size', 1000)
+                    status_cache_size = self.config['Cache'].getint('status_cache_size', 1000)
+                    file_hash_cache_size = self.config['Cache'].getint('file_hash_cache_size', 1000)
+                    self.exif_cache = LRUCache(exif_cache_size)
+                    self.status_cache = LRUCache(status_cache_size)
+                    self.file_hash_cache = LRUCache(file_hash_cache_size)
+                except Exception as e:
+                    logging.error(f"加载缓存设置失败: {e}")
+            
         except Exception as e:
             logging.error(f"加载设置失败: {e}")
-            self.handle_error(e, "加载设置")
+            raise
 
     def get_file_hash(self, file_path: str) -> str:
         """计算文件的MD5哈希值"""
