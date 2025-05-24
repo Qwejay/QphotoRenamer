@@ -22,12 +22,12 @@ import configparser
 import tkinter as tk
 import gc
 import time
-import multiprocessing 
+import multiprocessing
 import shutil
 import queue
-import threading 
+import threading
 
-
+# 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
 icon_path = os.path.join(base_path, 'icon.ico')
 
@@ -397,8 +397,11 @@ class PhotoRenamer:
             self.root.destroy()
 
     def load_or_create_settings(self):
+        """加载或创建配置文件"""
         try:
+            # 检查配置文件是否存在
             if not os.path.exists(self.config_file):
+                # 创建默认配置
                 config = {
                     'General': {
                         'language': 'zh_CN',
@@ -416,29 +419,31 @@ class PhotoRenamer:
                         'template5': '{date}_{time}_{camera}_{location}'
                     }
                 }
+                # 保存配置文件
                 try:
                     with open(self.config_file, 'w', encoding='utf-8') as f:
                         json.dump(config, f, indent=4)
                     logging.info("默认配置文件创建成功")
                 except Exception as e:
-                    logging.error(f"创建配置文件失败: {e}")
+                    logging.error(f"创建默认配置文件失败: {e}")
                     raise
             else:
-                try:
-                    with open(self.config_file, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                except Exception as e:
-                    logging.error(f"读取配置文件失败: {e}")
-                    raise
+                logging.info("配置文件已存在，加载现有配置")
+            
+            # 加载配置
+            self.load_settings()
+                
         except Exception as e:
-            logging.error(f"加载或创建配置文件失败: {e}")
-            raise
+            logging.error(f"加载或创建设置时出错: {e}")
+            self.handle_error(e, "加载或创建设置")
 
     def load_settings(self):
+        """加载设置"""
         try:
             if os.path.exists(self.config_file):
                 self.config.read(self.config_file, encoding='utf-8')
                 
+                # 加载基本设置
                 if 'General' in self.config:
                     self.language_var.set(self.config['General'].get('language', 'zh_CN'))
                     self.prefix_var.set(self.config['General'].get('prefix', ''))
@@ -446,16 +451,20 @@ class PhotoRenamer:
                     self.skip_extensions_var.set(self.config['General'].get('skip_extensions', '.txt,.log'))
                     self.fast_add_threshold_var.set(self.config['General'].get('fast_add_threshold', '100'))
                 
+                # 加载模板设置
                 if 'Template' in self.config:
+                    # 加载默认模板
                     default_template = self.config['Template'].get('default_template', '{date}_{time}')
                     self.template_var.set(default_template)
                     
+                    # 加载用户模板列表
                     self.templates = []
-                    for i in range(1, 6):
+                    for i in range(1, 6):  # 最多5个用户模板
                         template = self.config['Template'].get(f'template{i}')
                         if template:
                             self.templates.append(template)
                     
+                    # 如果没有找到任何模板，使用默认模板
                     if not self.templates:
                         self.templates = [
                             '{date}_{time}',
@@ -465,6 +474,7 @@ class PhotoRenamer:
                             '{date}_{time}_{camera}_{location}'
                         ]
             
+            # 加载日期设置
             if 'Date' in self.config:
                 try:
                     date_basis = self.config['Date'].get('date_basis', '拍摄日期')
@@ -474,6 +484,7 @@ class PhotoRenamer:
                 except Exception as e:
                     logging.error(f"加载日期设置失败: {e}")
             
+            # 加载文件处理设置
             if 'FileHandling' in self.config:
                 try:
                     self.fast_add_mode_var.set(self.config['FileHandling'].getboolean('fast_add_mode', False))
@@ -485,29 +496,10 @@ class PhotoRenamer:
                     self.show_errors_only_var.set(self.config['FileHandling'].getboolean('show_errors_only', False))
                 except Exception as e:
                     logging.error(f"加载文件处理设置失败: {e}")
-            
-            if 'UI' in self.config:
-                try:
-                    window_width = self.config['UI'].getint('window_width', 850)
-                    window_height = self.config['UI'].getint('window_height', 700)
-                    self.root.geometry(f"{window_width}x{window_height}")
-                except Exception as e:
-                    logging.error(f"加载UI设置失败: {e}")
-            
-            if 'Cache' in self.config:
-                try:
-                    exif_cache_size = self.config['Cache'].getint('exif_cache_size', 1000)
-                    status_cache_size = self.config['Cache'].getint('status_cache_size', 1000)
-                    file_hash_cache_size = self.config['Cache'].getint('file_hash_cache_size', 1000)
-                    self.exif_cache = LRUCache(exif_cache_size)
-                    self.status_cache = LRUCache(status_cache_size)
-                    self.file_hash_cache = LRUCache(file_hash_cache_size)
-                except Exception as e:
-                    logging.error(f"加载缓存设置失败: {e}")
-            
+                    
         except Exception as e:
             logging.error(f"加载设置失败: {e}")
-            raise
+            self.handle_error(e, "加载设置")
 
     def get_file_hash(self, file_path: str) -> str:
         """计算文件的MD5哈希值"""
