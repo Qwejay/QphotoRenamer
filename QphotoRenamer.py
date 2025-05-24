@@ -22,10 +22,10 @@ import configparser
 import tkinter as tk
 import gc
 import time
-import multiprocessing
-import shutil
-import queue
-import threading
+import multiprocessing  # 新增
+import shutil  # 添加shutil模块导入
+import queue  # 添加queue模块导入
+import threading  # 添加threading模块导入
 
 # 获取当前脚本所在的目录路径
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -155,7 +155,8 @@ LANGUAGES = {
         "rename_skipped_keep_name": "已跳过（保留原文件名）",
         "rename_skipped_no_date": "无拍摄日期",
         "rename_skipped_no_name": "无法生成新文件名",
-        "rename_skipped_exists": "目标文件已存在"
+        "rename_skipped_exists": "目标文件已存在",
+        "file_not_found": "文件不存在"
     },
     "English": {
         "window_title": "QphotoRenamer 2.4 —— QwejayHuang",
@@ -256,7 +257,8 @@ LANGUAGES = {
         "rename_skipped_keep_name": "Skipped (keep original filename)",
         "rename_skipped_no_date": "No shooting date",
         "rename_skipped_no_name": "Cannot generate new filename",
-        "rename_skipped_exists": "Target file already exists"
+        "rename_skipped_exists": "Target file already exists",
+        "file_not_found": "File not found"
     }
 }
 
@@ -399,30 +401,57 @@ class PhotoRenamer:
     def load_or_create_settings(self):
         """加载或创建配置文件"""
         try:
+            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
+            
             # 检查配置文件是否存在
-            if not os.path.exists(self.config_file):
+            if not os.path.exists("QphotoRenamer.ini"):
+                logging.info("配置文件不存在，创建默认配置")
                 # 创建默认配置
-                config = {
-                    'General': {
-                        'language': 'zh_CN',
-                        'prefix': '',
-                        'suffix': '',
-                        'skip_extensions': '.txt,.log',
-                        'fast_add_threshold': '100'
-                    },
-                    'Template': {
-                        'default_template': '{date}_{time}',
-                        'template1': '{date}_{time}',
-                        'template2': '{date}_{time}_{camera}',
-                        'template3': '{date}_{time}_{location}',
-                        'template4': '{date}_{time}_{description}',
-                        'template5': '{date}_{time}_{camera}_{location}'
-                    }
+                config['General'] = {
+                    'language': '简体中文',
+                    'prefix': '',
+                    'suffix': '',
+                    'skip_extensions': ''
                 }
+                
+                config['Date'] = {
+                    'date_basis': '拍摄日期',
+                    'alternate_date_basis': '修改日期'
+                }
+                
+                config['FileHandling'] = {
+                    'fast_add_mode': 'false',
+                    'fast_add_threshold': '10',
+                    'name_conflict': 'add_suffix',
+                    'suffix_option': '_001',
+                    'auto_scroll': 'true',
+                    'show_errors_only': 'false'
+                }
+                
+                config['UI'] = {
+                    'window_width': '850',
+                    'window_height': '700'
+                }
+                
+                config['Cache'] = {
+                    'exif_cache_size': '1000',
+                    'status_cache_size': '1000',
+                    'file_hash_cache_size': '1000'
+                }
+                
+                config['Template'] = {
+                    'default_template': '%Y%m%d_%H%M%S',
+                    'template1': '%Y%m%d_%H%M%S',
+                    'template2': '%Y%m%d_%H%M%S_{camera}_{lens}_{iso}_{focal}_{aperture}',
+                    'template3': '%Y%m%d_%H%M%S_{camera}',
+                    'template4': '{camera}_{lens}_{iso}_{focal}_{aperture}',
+                    'template5': '{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}'
+                }
+                
                 # 保存配置文件
                 try:
-                    with open(self.config_file, 'w', encoding='utf-8') as f:
-                        json.dump(config, f, indent=4)
+                    with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
+                        config.write(f)
                     logging.info("默认配置文件创建成功")
                 except Exception as e:
                     logging.error(f"创建默认配置文件失败: {e}")
@@ -440,63 +469,49 @@ class PhotoRenamer:
     def load_settings(self):
         """加载设置"""
         try:
-            if os.path.exists(self.config_file):
-                self.config.read(self.config_file, encoding='utf-8')
-                
-                # 加载基本设置
-                if 'General' in self.config:
-                    self.language_var.set(self.config['General'].get('language', 'zh_CN'))
-                    self.prefix_var.set(self.config['General'].get('prefix', ''))
-                    self.suffix_var.set(self.config['General'].get('suffix', ''))
-                    self.skip_extensions_var.set(self.config['General'].get('skip_extensions', '.txt,.log'))
-                    self.fast_add_threshold_var.set(self.config['General'].get('fast_add_threshold', '100'))
-                
-                # 加载模板设置
-                if 'Template' in self.config:
-                    # 加载默认模板
-                    default_template = self.config['Template'].get('default_template', '{date}_{time}')
-                    self.template_var.set(default_template)
-                    
-                    # 加载用户模板列表
-                    self.templates = []
-                    for i in range(1, 6):  # 最多5个用户模板
-                        template = self.config['Template'].get(f'template{i}')
-                        if template:
-                            self.templates.append(template)
-                    
-                    # 如果没有找到任何模板，使用默认模板
-                    if not self.templates:
-                        self.templates = [
-                            '{date}_{time}',
-                            '{date}_{time}_{camera}',
-                            '{date}_{time}_{location}',
-                            '{date}_{time}_{description}',
-                            '{date}_{time}_{camera}_{location}'
-                        ]
+            # 读取配置文件
+            config = configparser.ConfigParser()
+            config.read('QphotoRenamer.ini', encoding='utf-8')
             
-            # 加载日期设置
-            if 'Date' in self.config:
-                try:
-                    date_basis = self.config['Date'].get('date_basis', '拍摄日期')
-                    alternate_date_basis = self.config['Date'].get('alternate_date_basis', '修改日期')
-                    self.date_basis_var.set(next(item['display'] for item in self.lang["date_bases"] if item['value'] == date_basis))
-                    self.alternate_date_var.set(next(item['display'] for item in self.lang["alternate_dates"] if item['value'] == alternate_date_basis))
-                except Exception as e:
-                    logging.error(f"加载日期设置失败: {e}")
+            # 确保[General]和[Template]部分存在
+            if not config.has_section('General'):
+                config.add_section('General')
+            if not config.has_section('Template'):
+                config.add_section('Template')
             
-            # 加载文件处理设置
-            if 'FileHandling' in self.config:
-                try:
-                    self.fast_add_mode_var.set(self.config['FileHandling'].getboolean('fast_add_mode', False))
-                    self.fast_add_threshold_var.set(self.config['FileHandling'].getint('fast_add_threshold', 10))
-                    name_conflict = self.config['FileHandling'].get('name_conflict', 'add_suffix')
-                    self.name_conflict_var.set(next(item['display'] for item in self.lang["name_conflicts"] if item['value'] == name_conflict))
-                    self.suffix_option_var.set(self.config['FileHandling'].get('suffix_option', '_001'))
-                    self.auto_scroll_var.set(self.config['FileHandling'].getboolean('auto_scroll', True))
-                    self.show_errors_only_var.set(self.config['FileHandling'].getboolean('show_errors_only', False))
-                except Exception as e:
-                    logging.error(f"加载文件处理设置失败: {e}")
-                    
+            # 从[General]部分加载基本设置
+            self.language_var.set(config.get('General', 'language', fallback='简体中文'))
+            self.prefix_var.set(config.get('General', 'prefix', fallback=''))
+            self.suffix_var.set(config.get('General', 'suffix', fallback=''))
+            self.skip_extensions_var.set(config.get('General', 'skip_extensions', fallback=''))
+            self.auto_scroll_var.set(config.getboolean('General', 'auto_scroll', fallback=True))
+            self.fast_add_mode_var.set(config.getboolean('General', 'fast_add_mode', fallback=False))
+            self.fast_add_threshold_var.set(config.getint('General', 'fast_add_threshold', fallback=100))
+            
+            # 从[Template]部分加载模板
+            default_template = config.get('Template', 'default', fallback='{date}_{time}')
+            self.template_var.set(default_template)
+            
+            # 加载用户模板（最多5个）
+            self.templates = []
+            for i in range(1, 6):
+                template = config.get('Template', f'template{i}', fallback='')
+                if template:
+                    self.templates.append(template)
+            
+            # 如果没有找到任何模板，使用默认模板
+            if not self.templates:
+                self.templates = [
+                    '{date}_{time}',
+                    '{date}_{time}_{camera}',
+                    '{date}_{time}_{camera}_{lens}',
+                    '{date}_{time}_{camera}_{lens}_{iso}',
+                    '{date}_{time}_{camera}_{lens}_{iso}_{focal}'
+                ]
+            
+            # 更新语言
+            self.set_language(self.language_var.get())
+            
         except Exception as e:
             logging.error(f"加载设置失败: {e}")
             self.handle_error(e, "加载设置")
@@ -761,7 +776,16 @@ class PhotoRenamer:
     def on_date_basis_selected(self, event):
         """当日期基准选择改变时，更新文件列表"""
         try:
-            self.remove_invalid_files()  # 切换命名依据前自动清理无效文件
+            # 获取当前选择的日期基准
+            date_basis = self.date_basis_var.get()
+            
+            # 根据选择的日期基准启用或禁用备选日期下拉框
+            if date_basis in ["创建日期", "修改日期"]:
+                self.alternate_date_combobox.configure(state="disabled")
+                # 将备选日期设置为"保留原文件名"
+                self.alternate_date_var.set("保留原文件名")
+            else:
+                self.alternate_date_combobox.configure(state="readonly")
             
             # 清除缓存，强制重新计算状态
             if hasattr(self, 'status_cache'):
@@ -771,41 +795,60 @@ class PhotoRenamer:
             
             # 更新文件状态和新名称
             for item in self.files_tree.get_children():
-                file_path = self.files_tree.item(item)['values'][0]
-                # 检查文件是否存在
-                if not os.path.exists(file_path):
-                    # 如果文件不存在，尝试从新名称列获取实际路径
-                    new_name = self.files_tree.item(item)['values'][1]
-                    if new_name and new_name != self.lang["ready_to_rename"]:
-                        directory = os.path.dirname(file_path)
-                        new_path = os.path.join(directory, new_name)
-                        if os.path.exists(new_path):
-                            # 更新树形视图中的文件路径
-                            self.files_tree.item(item, values=(new_path, new_name, self.files_tree.item(item)['values'][2]))
-                            file_path = new_path
-                
-                exif_data = self.get_exif_data(file_path)
-                
-                # 检查是否有拍摄日期
-                has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
-                
-                # 强制重新计算状态
-                if not has_shooting_date:
-                    alternate = self.alternate_date_var.get()
-                    if alternate == "保留原文件名":
-                        status = self.lang["prepare_rename_keep_name"]
+                try:
+                    values = self.files_tree.item(item)['values']
+                    if not values or len(values) < 3:
+                        continue
+                        
+                    file_path = str(values[0])  # 确保是字符串
+                    if not file_path:
+                        continue
+                        
+                    # 检查文件是否存在
+                    if not os.path.exists(file_path):
+                        # 如果文件不存在，尝试从新名称列获取实际路径
+                        new_name = str(values[1]) if values[1] else ""  # 确保是字符串
+                        if new_name and new_name != self.lang["ready_to_rename"]:
+                            directory = os.path.dirname(file_path)
+                            new_path = os.path.join(directory, new_name)
+                            if os.path.exists(new_path):
+                                # 更新树形视图中的文件路径
+                                self.files_tree.item(item, values=(new_path, new_name, values[2]))
+                                file_path = new_path
+                            else:
+                                # 如果文件确实不存在，标记为无效
+                                self.files_tree.set(item, 'status', self.lang["file_not_found"])
+                                continue
+                    
+                    exif_data = self.get_exif_data(file_path)
+                    
+                    # 检查是否有拍摄日期
+                    has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
+                    
+                    # 根据日期基准和文件状态更新状态
+                    if date_basis == "拍摄日期":
+                        if has_shooting_date:
+                            status = self.lang["prepare_rename_by"].format("拍摄日期")
+                        else:
+                            alternate = self.alternate_date_var.get()
+                            if alternate == "保留原文件名":
+                                status = self.lang["prepare_rename_keep_name"]
+                            else:
+                                status = self.lang["prepare_rename_by"].format(alternate)
                     else:
-                        # 直接使用备选日期选项
-                        status = self.lang["prepare_rename_by"].format(alternate)
-                else:
-                    # 如果有拍摄日期，保持使用拍摄日期
-                    status = self.lang["prepare_rename_by"].format("拍摄日期")
-                
-                self.files_tree.set(item, 'status', status)
-                
-                # 强制刷新新名称
-                new_name = self.generate_new_name(file_path, exif_data)
-                self.files_tree.set(item, 'renamed_name', new_name)
+                        # 对于其他日期基准，直接使用选择的基准
+                        status = self.lang["prepare_rename_by"].format(date_basis)
+                    
+                    self.files_tree.set(item, 'status', status)
+                    
+                    # 强制刷新新名称
+                    new_name = self.generate_new_name(file_path, exif_data)
+                    if new_name:  # 确保新名称不为空
+                        self.files_tree.set(item, 'renamed_name', new_name)
+                        
+                except Exception as e:
+                    logging.error(f"处理文件项时出错: {e}")
+                    continue
             
             # 更新UI
             self.update_renamed_name_column()
@@ -818,51 +861,71 @@ class PhotoRenamer:
     def on_alternate_date_selected(self, event):
         """当备选日期选择改变时，更新文件列表"""
         try:
-            self.remove_invalid_files()  # 切换命名依据前自动清理无效文件
-            
             # 清除缓存，强制重新计算状态
             if hasattr(self, 'status_cache'):
                 self.status_cache.clear()
             if hasattr(self, 'file_hash_cache'):
                 self.file_hash_cache.clear()
             
+            # 获取当前选择的日期基准和备选日期
+            date_basis = self.date_basis_var.get()
+            alternate = self.alternate_date_var.get()
+            
             # 更新文件状态和新名称
             for item in self.files_tree.get_children():
-                file_path = self.files_tree.item(item)['values'][0]
-                # 检查文件是否存在
-                if not os.path.exists(file_path):
-                    # 如果文件不存在，尝试从新名称列获取实际路径
-                    new_name = self.files_tree.item(item)['values'][1]
-                    if new_name and new_name != self.lang["ready_to_rename"]:
-                        directory = os.path.dirname(file_path)
-                        new_path = os.path.join(directory, new_name)
-                        if os.path.exists(new_path):
-                            # 更新树形视图中的文件路径
-                            self.files_tree.item(item, values=(new_path, new_name, self.files_tree.item(item)['values'][2]))
-                            file_path = new_path
-                
-                exif_data = self.get_exif_data(file_path)
-                
-                # 检查是否有拍摄日期
-                has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
-                
-                # 强制重新计算状态
-                if not has_shooting_date:
-                    alternate = self.alternate_date_var.get()
-                    if alternate == "保留原文件名":
-                        status = self.lang["prepare_rename_keep_name"]
+                try:
+                    values = self.files_tree.item(item)['values']
+                    if not values or len(values) < 3:
+                        continue
+                        
+                    file_path = str(values[0])  # 确保是字符串
+                    if not file_path:
+                        continue
+                        
+                    # 检查文件是否存在
+                    if not os.path.exists(file_path):
+                        # 如果文件不存在，尝试从新名称列获取实际路径
+                        new_name = str(values[1]) if values[1] else ""  # 确保是字符串
+                        if new_name and new_name != self.lang["ready_to_rename"]:
+                            directory = os.path.dirname(file_path)
+                            new_path = os.path.join(directory, new_name)
+                            if os.path.exists(new_path):
+                                # 更新树形视图中的文件路径
+                                self.files_tree.item(item, values=(new_path, new_name, values[2]))
+                                file_path = new_path
+                            else:
+                                # 如果文件确实不存在，标记为无效
+                                self.files_tree.set(item, 'status', self.lang["file_not_found"])
+                                continue
+                    
+                    exif_data = self.get_exif_data(file_path)
+                    
+                    # 检查是否有拍摄日期
+                    has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
+                    
+                    # 根据日期基准和文件状态更新状态
+                    if date_basis == "拍摄日期":
+                        if has_shooting_date:
+                            status = self.lang["prepare_rename_by"].format("拍摄日期")
+                        else:
+                            if alternate == "保留原文件名":
+                                status = self.lang["prepare_rename_keep_name"]
+                            else:
+                                status = self.lang["prepare_rename_by"].format(alternate)
                     else:
-                        # 直接使用备选日期选项
-                        status = self.lang["prepare_rename_by"].format(alternate)
-                else:
-                    # 如果有拍摄日期，保持使用拍摄日期
-                    status = self.lang["prepare_rename_by"].format("拍摄日期")
-                
-                self.files_tree.set(item, 'status', status)
-                
-                # 强制刷新新名称
-                new_name = self.generate_new_name(file_path, exif_data)
-                self.files_tree.set(item, 'renamed_name', new_name)
+                        # 对于其他日期基准，直接使用选择的基准
+                        status = self.lang["prepare_rename_by"].format(date_basis)
+                    
+                    self.files_tree.set(item, 'status', status)
+                    
+                    # 强制刷新新名称
+                    new_name = self.generate_new_name(file_path, exif_data)
+                    if new_name:  # 确保新名称不为空
+                        self.files_tree.set(item, 'renamed_name', new_name)
+                        
+                except Exception as e:
+                    logging.error(f"处理文件项时出错: {e}")
+                    continue
             
             # 更新UI
             self.update_renamed_name_column()
@@ -1963,6 +2026,7 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                             date_obj = self.get_cached_or_real_modification_date(file_path)
                     
                     if not date_obj:
+                        # 如果备选日期也获取失败，返回保留原文件名
                         return True, os.path.basename(file_path)
             elif date_basis == "修改日期":
                 date_obj = self.get_cached_or_real_modification_date(file_path)
@@ -1982,22 +2046,18 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             if not new_name:
                 return False, self.lang["rename_skipped_no_name"]
 
-            # 重命名文件
-            directory = os.path.dirname(file_path)
-            new_path = os.path.join(directory, new_name)
-            
             # 检查目标文件是否已存在
-            if os.path.exists(new_path):
+            directory = os.path.dirname(file_path)
+            target_path = os.path.join(directory, new_name)
+            if os.path.exists(target_path) and not os.path.samefile(file_path, target_path):
                 return False, self.lang["rename_skipped_exists"]
-            
+
             # 执行重命名
-            if self.safe_rename_file(file_path, new_path):
-                # 更新缓存
-                self.update_caches_on_rename(file_path, new_path)
-                return True, new_path
+            if self.safe_rename_file(file_path, target_path):
+                return True, new_name
             else:
-                return False, self.lang["rename_failed"]
-                
+                return False, self.lang["rename_skipped_no_name"]
+
         except Exception as e:
             logging.error(f"重命名文件失败: {file_path}, 错误: {e}")
             return False, str(e)
@@ -2263,17 +2323,40 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         self.update_file_count()  # 更新文件总数
 
     def open_file(self, event):
+        """双击打开文件"""
         item = self.files_tree.identify_row(event.y)
-        if item:
-            file_path = self.files_tree.item(item, 'values')[0]
-            try:
-                if sys.platform == "win32":
-                    os.startfile(file_path)
+        if not item:
+            return
+            
+        file_path = self.files_tree.item(item, 'values')[0]
+        new_name = self.files_tree.item(item, 'values')[1]
+
+        # 检查文件是否存在，如果不存在，尝试使用新名称构建路径
+        if not os.path.exists(file_path):
+            # 获取文件所在目录
+            directory = os.path.dirname(file_path)
+            # 如果新名称存在且不是"准备重命名"，则使用新名称构建路径
+            if new_name and new_name != self.lang["ready_to_rename"]:
+                new_path = os.path.join(directory, new_name)
+                if os.path.exists(new_path):
+                    file_path = new_path
                 else:
-                    opener = "open" if sys.platform == "darwin" else "xdg-open"
-                    subprocess.call([opener, file_path])
-            except Exception as e:
-                logging.error(f"打开文件失败: {file_path}, 错误: {e}")
+                    self.update_status_bar("file_not_found", file_path)
+                    return
+            else:
+                self.update_status_bar("file_not_found", file_path)
+                return
+
+        try:
+            if sys.platform == 'win32':
+                os.startfile(file_path)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.run(['open', file_path])
+            else:  # Linux
+                subprocess.run(['xdg-open', file_path])
+        except Exception as e:
+            logging.error(f"打开文件失败: {file_path}, 错误: {e}")
+            self.handle_error(e, "打开文件")
 
     def update_status_bar(self, message_key, *args):
         """更新状态栏消息"""
@@ -2377,30 +2460,61 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         file_path = self.files_tree.item(item, 'values')[0]
         new_name = self.files_tree.item(item, 'values')[1]
 
+        # 检查文件是否存在，如果不存在，尝试使用新名称构建路径
+        if not os.path.exists(file_path):
+            # 获取文件所在目录
+            directory = os.path.dirname(file_path)
+            # 如果新名称存在且不是"准备重命名"，则使用新名称构建路径
+            if new_name and new_name != self.lang["ready_to_rename"]:
+                new_path = os.path.join(directory, new_name)
+                if os.path.exists(new_path):
+                    file_path = new_path
+                else:
+                    self.create_tooltip(event.widget, f"文件不存在: {file_path}")
+                    return
+            else:
+                self.create_tooltip(event.widget, f"文件不存在: {file_path}")
+                return
+
         # 开始一个新线程来处理
         def process_info():
             try:
+                # 获取文件状态
+                try:
+                    stat = os.stat(file_path)
+                    modification_date = datetime.datetime.fromtimestamp(stat.st_mtime)
+                    if hasattr(stat, 'st_birthtime'):  # macOS
+                        creation_date = datetime.datetime.fromtimestamp(stat.st_birthtime)
+                    elif hasattr(stat, 'st_ctime'):    # Windows
+                        creation_date = datetime.datetime.fromtimestamp(stat.st_ctime)
+                    else:                              # Linux
+                        creation_date = datetime.datetime.fromtimestamp(stat.st_ctime)
+                except (OSError, AttributeError) as e:
+                    logging.error(f"获取文件状态失败: {file_path}, 错误: {e}")
+                    self.root.after(0, lambda: self.create_tooltip(event.widget, f"获取文件状态失败: {str(e)}"))
+                    return
+
+                # 获取EXIF数据
+                exif_data = None
+                try:
+                    if file_path.lower().endswith('.heic'):
+                        exif_data = self.get_heic_data(file_path)
+                    else:
+                        exif_data = self.get_exif_data(file_path)
+                except Exception as e:
+                    logging.error(f"获取EXIF数据失败: {file_path}, 错误: {e}")
+                    exif_data = None
+
                 # 如果新名称为空（快速添加模式跳过），则动态生成新名称
                 if not new_name:
-                    exif_data = None
-                    if file_path.lower().endswith('.heic'):
-                        exif_data = self.get_heic_data(file_path)
-                    else:
-                        exif_data = self.get_exif_data(file_path)
-                    generated_name = self.generate_new_name(file_path, exif_data)  # 动态生成新名称
+                    generated_name = self.generate_new_name(file_path, exif_data)
                     self.root.after(0, lambda: self.files_tree.set(item, 'renamed_name', generated_name))
-                    # 显示文件信息
                     info = self.extract_omitted_info(file_path, exif_data, generated_name)
-                    self.root.after(0, lambda: self.create_tooltip(event.widget, info))
                 else:
-                    # 已有新名称，直接显示信息
-                    exif_data = None
-                    if file_path.lower().endswith('.heic'):
-                        exif_data = self.get_heic_data(file_path)
-                    else:
-                        exif_data = self.get_exif_data(file_path)
                     info = self.extract_omitted_info(file_path, exif_data, new_name)
-                    self.root.after(0, lambda: self.create_tooltip(event.widget, info))
+
+                # 显示信息
+                self.root.after(0, lambda: self.create_tooltip(event.widget, info))
             except Exception as e:
                 logging.error(f"显示文件信息出错: {e}")
                 self.handle_error(e, "显示文件信息")
@@ -2408,48 +2522,65 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         Thread(target=process_info, daemon=True).start()
 
     def extract_omitted_info(self, file_path, exif_data, new_name):
-        """提取快速添加模式所省略的信息"""
-        # 原文件名
-        original_name = os.path.basename(file_path)
-        info = f"旧名称: {original_name}\n"
-        info += f"新名称: {new_name}\n"  # 添加新名称
-
-        # 拍摄日期
-        if exif_data and 'DateTimeOriginalParsed' in exif_data:
-            info += f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-        else:
-            info += "拍摄日期: 无\n"
-
-        # 修改日期
-        mod_date = self.get_file_modification_date(file_path)
-        if mod_date:
-            info += f"修改日期: {mod_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        else:
-            info += "修改日期: 无\n"
-
-        # 创建日期
-        create_date = self.get_file_creation_date(file_path)
-        if create_date:
-            info += f"创建日期: {create_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        else:
-            info += "创建日期: 无\n"
-
-        # 其他 EXIF 信息
-        if exif_data:
-            if 'Model' in exif_data:
-                info += f"拍摄设备: {exif_data['Model']}"
-            if 'LensModel' in exif_data:
-                info += f"镜头: {exif_data['LensModel']}\n"
-            if 'ISOSpeedRatings' in exif_data:
-                info += f"ISO: {exif_data['ISOSpeedRatings']}\n"
-            if 'FNumber' in exif_data:
-                info += f"光圈: f/{exif_data['FNumber']}\n"
-            if 'ExposureTime' in exif_data:
-                info += f"快门速度: {exif_data['ExposureTime']} 秒\n"
-            if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
-                info += f"分辨率: {exif_data['ImageWidth']}x{exif_data['ImageHeight']}\n"
-
-        return info
+        """提取被省略的信息"""
+        try:
+            info = []
+            
+            # 获取文件状态
+            try:
+                stat = os.stat(file_path)
+                
+                # 获取修改日期
+                try:
+                    mtime = stat.st_mtime
+                    modification_date = datetime.datetime.fromtimestamp(mtime)
+                    info.append(f"修改日期: {modification_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                except (AttributeError, OSError):
+                    pass
+                
+                # 获取创建日期
+                try:
+                    if hasattr(stat, 'st_birthtime'):  # macOS
+                        birth_time = stat.st_birthtime
+                    elif hasattr(stat, 'st_ctime'):    # Windows
+                        birth_time = stat.st_ctime
+                    else:                              # Linux
+                        birth_time = stat.st_ctime
+                    creation_date = datetime.datetime.fromtimestamp(birth_time)
+                    info.append(f"创建日期: {creation_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                except (AttributeError, OSError):
+                    pass
+                
+            except (OSError, AttributeError):
+                pass
+            
+            # 获取EXIF信息
+            if exif_data:
+                if 'DateTimeOriginalParsed' in exif_data:
+                    info.append(f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}")
+                if 'Make' in exif_data:
+                    info.append(f"相机品牌: {exif_data['Make']}")
+                if 'Model' in exif_data:
+                    info.append(f"相机型号: {exif_data['Model']}")
+                if 'LensModel' in exif_data:
+                    info.append(f"镜头型号: {exif_data['LensModel']}")
+                if 'FNumber' in exif_data:
+                    info.append(f"光圈: f/{exif_data['FNumber']}")
+                if 'ExposureTime' in exif_data:
+                    info.append(f"快门速度: {exif_data['ExposureTime']}")
+                if 'ISOSpeedRatings' in exif_data:
+                    info.append(f"ISO: {exif_data['ISOSpeedRatings']}")
+                if 'FocalLength' in exif_data:
+                    info.append(f"焦距: {exif_data['FocalLength']}mm")
+            
+            # 添加新名称信息
+            if new_name and new_name != self.lang["ready_to_rename"]:
+                info.append(f"新名称: {new_name}")
+            
+            return "\n".join(info)
+        except Exception as e:
+            logging.error(f"提取被省略信息失败: {file_path}, 错误: {e}")
+            return f"提取信息失败: {str(e)}"
 
     # 添加新方法
     def stop_all_operations(self):
@@ -2526,24 +2657,59 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             return False, None
 
     def cache_file_info(self, file_path):
-        """缓存文件的所有必要信息"""
+        """缓存文件信息"""
         try:
-            info = {
-                'modification_date': self.get_file_modification_date(file_path),
-                'creation_date': self.get_file_creation_date(file_path),
-                'exif_data': None,
-                'video_date': None
-            }
+            # 规范化文件路径
+            file_path = os.path.normpath(file_path)
             
-            # 根据文件类型获取额外信息
-            if file_path.lower().endswith('.heic'):
-                info['exif_data'] = self.get_heic_data(file_path)
-            elif file_path.lower().endswith(SUPPORTED_IMAGE_FORMATS):
-                info['exif_data'] = self.get_exif_data(file_path)
-            elif file_path.lower().endswith(('.mov', '.mp4', '.avi', '.mkv')):
+            # 检查文件是否存在
+            if not os.path.exists(file_path):
+                return None
+            
+            # 获取文件信息
+            info = {}
+            try:
+                stat = os.stat(file_path)
+                
+                # 获取修改日期
+                try:
+                    mtime = stat.st_mtime
+                    info['modification_date'] = datetime.datetime.fromtimestamp(mtime)
+                except (AttributeError, OSError) as e:
+                    logging.error(f"获取文件修改时间失败: {file_path}, 错误: {e}")
+                    info['modification_date'] = None
+                
+                # 获取创建日期
+                try:
+                    if hasattr(stat, 'st_birthtime'):  # macOS
+                        birth_time = stat.st_birthtime
+                    elif hasattr(stat, 'st_ctime'):    # Windows
+                        birth_time = stat.st_ctime
+                    else:                              # Linux
+                        birth_time = stat.st_ctime
+                    info['creation_date'] = datetime.datetime.fromtimestamp(birth_time)
+                except (AttributeError, OSError) as e:
+                    logging.error(f"获取文件创建时间失败: {file_path}, 错误: {e}")
+                    info['creation_date'] = None
+                
+            except (OSError, AttributeError) as e:
+                logging.error(f"获取文件状态失败: {file_path}, 错误: {e}")
+                return None
+            
+            # 获取EXIF数据（如果是图片文件）
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in SUPPORTED_IMAGE_FORMATS:
+                if ext == '.heic':
+                    info['exif_data'] = self.get_heic_data(file_path)
+                else:
+                    info['exif_data'] = self.get_exif_data(file_path)
+            elif ext in ['.mov', '.mp4', '.avi', '.mkv']:
                 info['video_date'] = self.get_video_creation_date(file_path)
             
-            self.file_info_cache.set(file_path, info)
+            # 更新缓存
+            if hasattr(self, 'file_info_cache'):
+                self.file_info_cache.set(file_path, info)
+            
             return info
         except Exception as e:
             logging.error(f"缓存文件信息失败: {file_path}, 错误: {e}")
@@ -2644,16 +2810,82 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             self.root.destroy()
 
     def get_cached_or_real_modification_date(self, file_path):
-        info = self.file_info_cache.get(file_path)
-        if info and info.get('modification_date'):
-            return info['modification_date']
-        return self.get_file_modification_date(file_path)
+        """获取文件的修改日期，优先使用缓存"""
+        try:
+            # 规范化文件路径
+            file_path = os.path.normpath(file_path)
+            
+            # 检查缓存
+            if hasattr(self, 'file_info_cache'):
+                info = self.file_info_cache.get(file_path)
+                if info and 'modification_date' in info and info['modification_date']:
+                    return info['modification_date']
+            
+            # 如果缓存中没有或缓存为空，获取实际日期
+            if os.path.exists(file_path):
+                stat = os.stat(file_path)
+                try:
+                    # 尝试获取修改时间
+                    mtime = stat.st_mtime
+                    date_obj = datetime.datetime.fromtimestamp(mtime)
+                    
+                    # 更新缓存
+                    if hasattr(self, 'file_info_cache'):
+                        if not info:
+                            info = {}
+                        info['modification_date'] = date_obj
+                        self.file_info_cache.set(file_path, info)
+                    
+                    return date_obj
+                except (AttributeError, OSError) as e:
+                    logging.error(f"获取文件修改时间失败: {file_path}, 错误: {e}")
+            
+            return None
+        except Exception as e:
+            logging.error(f"获取文件修改日期失败: {file_path}, 错误: {e}")
+            return None
 
     def get_cached_or_real_creation_date(self, file_path):
-        info = self.file_info_cache.get(file_path)
-        if info and info.get('creation_date'):
-            return info['creation_date']
-        return self.get_file_creation_date(file_path)
+        """获取文件的创建日期，优先使用缓存"""
+        try:
+            # 规范化文件路径
+            file_path = os.path.normpath(file_path)
+            
+            # 检查缓存
+            if hasattr(self, 'file_info_cache'):
+                info = self.file_info_cache.get(file_path)
+                if info and 'creation_date' in info and info['creation_date']:
+                    return info['creation_date']
+            
+            # 如果缓存中没有或缓存为空，获取实际日期
+            if os.path.exists(file_path):
+                stat = os.stat(file_path)
+                try:
+                    # 尝试获取创建时间
+                    if hasattr(stat, 'st_birthtime'):  # macOS
+                        birth_time = stat.st_birthtime
+                    elif hasattr(stat, 'st_ctime'):    # Windows
+                        birth_time = stat.st_ctime
+                    else:                              # Linux
+                        birth_time = stat.st_ctime
+                    
+                    date_obj = datetime.datetime.fromtimestamp(birth_time)
+                    
+                    # 更新缓存
+                    if hasattr(self, 'file_info_cache'):
+                        if not info:
+                            info = {}
+                        info['creation_date'] = date_obj
+                        self.file_info_cache.set(file_path, info)
+                    
+                    return date_obj
+                except (AttributeError, OSError) as e:
+                    logging.error(f"获取文件创建时间失败: {file_path}, 错误: {e}")
+            
+            return None
+        except Exception as e:
+            logging.error(f"获取文件创建日期失败: {file_path}, 错误: {e}")
+            return None
 
     def generate_new_name(self, file_path, exif_data, add_suffix=True):
         try:
