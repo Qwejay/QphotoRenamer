@@ -22,33 +22,25 @@ import configparser
 import tkinter as tk
 import gc
 import time
-import multiprocessing  # 新增
-import shutil  # 添加shutil模块导入
-import queue  # 添加queue模块导入
-import threading  # 添加threading模块导入
-
-# 获取当前脚本所在的目录路径
+import multiprocessing
+import shutil
+import queue
+import threading
 base_path = os.path.dirname(os.path.abspath(__file__))
 icon_path = os.path.join(base_path, 'icon.ico')
-
-# 常用日期格式
 COMMON_DATE_FORMATS = [
-    "%Y%m%d_%H%M%S",    # 20240729_141530
-    "%Y-%m-%d %H:%M:%S",  # 2024-07-29 14:15:30
-    "%d-%m-%Y %H:%M:%S",  # 29-07-2024 14:15:30
-    "%Y%m%d",            # 20240729
-    "%H%M%S",            # 141530
-    "%Y-%m-%d",          # 2024-07-29
-    "%d-%m-%Y"           # 29-07-2024
+    "%Y%m%d_%H%M%S",    
+    "%Y-%m-%d %H:%M:%S",  
+    "%d-%m-%Y %H:%M:%S",  
+    "%Y%m%d",            
+    "%H%M%S",            
+    "%Y-%m-%d",          
+    "%d-%m-%Y"           
 ]
-
-# 支持的图片格式
 SUPPORTED_IMAGE_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.heic'}
-
-# 多语言支持
 LANGUAGES = {
     "简体中文": {
-        "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.4 —— QwejayHuang",
+        "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.5 —— QwejayHuang",
         "description_base": "拖放文件或照片，将按照",
         "description_suffix": "重命名文件。若无法获取拍摄日期（或非媒体文件），则使用",
         "start_renaming": "开始重命名",
@@ -159,7 +151,7 @@ LANGUAGES = {
         "file_not_found": "文件不存在"
     },
     "English": {
-        "window_title": "QphotoRenamer 2.4 —— QwejayHuang",
+        "window_title": "QphotoRenamer 2.5 —— QwejayHuang",
         "description_base": "Drag and drop files or photos to rename them based on ",
         "description_suffix": ". If the shooting date is unavailable, use ",
         "start_renaming": "Start Renaming",
@@ -261,54 +253,44 @@ LANGUAGES = {
         "file_not_found": "File not found"
     }
 }
-
 class LRUCache:
     def __init__(self, capacity: int):
         self.capacity = capacity
         self.cache = OrderedDict()
-
     def get(self, key: str) -> Optional[Any]:
         if key not in self.cache:
             return None
         self.cache.move_to_end(key)
         return self.cache[key]
-
     def put(self, key: str, value: Any) -> None:
         if key in self.cache:
             self.cache.move_to_end(key)
         self.cache[key] = value
         if len(self.cache) > self.capacity:
             self.cache.popitem(last=False)
-            
     def clear(self) -> None:
         """清空缓存"""
         self.cache.clear()
-
 class FileInfoCache:
     def __init__(self):
         self.cache = {}
         self.lock = threading.Lock()
-    
     def get(self, file_path):
         with self.lock:
             return self.cache.get(file_path)
-    
     def set(self, file_path, info):
         with self.lock:
             self.cache[file_path] = info
-    
     def remove(self, file_path):
         with self.lock:
             self.cache.pop(file_path, None)
-    
     def clear(self):
         with self.lock:
             self.cache.clear()
-
 class PhotoRenamer:
     def __init__(self, root):
         self.root = root
-        self.template_var = ttk.StringVar(value="%Y%m%d_%H%M%S")  # 设置默认模板
+        self.template_var = ttk.StringVar(value="%Y%m%d_%H%M%S") 
         self.prefix_var = ttk.StringVar(value="")
         self.suffix_var = ttk.StringVar(value="")
         self.language_var = ttk.StringVar(value="简体中文")
@@ -318,7 +300,7 @@ class PhotoRenamer:
         self.show_errors_only_var = ttk.BooleanVar(value=False)
         self.fast_add_mode_var = ttk.BooleanVar(value=True)
         self.fast_add_threshold_var = ttk.IntVar(value=100)
-        self.date_format = "%Y%m%d_%H%M%S"  # 设置默认日期格式
+        self.date_format = "%Y%m%d_%H%M%S"
         self.stop_event = Event()
         self.renaming_in_progress = False
         self.processed_files = set()
@@ -339,27 +321,24 @@ class PhotoRenamer:
         self.file_queue = Queue()
         self.processing_thread = None
         self.toplevel_windows = []
-        self.batch_size = 50  # 增加批处理大小到50
+        self.batch_size = 50  
         self.processing_batch = False
         self.last_cleanup_time = time.time()
         self.cleanup_interval = 300
-        self.root.title("文件&照片批量重命名 QphotoRenamer 2.4 —— QwejayHuang")
+        self.root.title("文件&照片批量重命名 QphotoRenamer 2.5 —— QwejayHuang")
         self.root.geometry("850x600")
         self.root.iconbitmap(icon_path)
         self.style = ttk.Style('litera')
         self.lock = Lock()
         self.initialize_ui()
         self.load_or_create_settings()
-        self.remove_invalid_files()  # 启动后自动清理无效文件
+        self.remove_invalid_files()  
         self.root.after(300000, self.cleanup_cache)
-        
-        # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.file_info_cache = FileInfoCache()
         self.update_queue = queue.Queue()
         self.update_thread = None
         self.stop_update_event = threading.Event()
-        
     def remove_invalid_files(self):
         """自动移除列表中已不存在的文件"""
         invalid_items = []
@@ -371,115 +350,68 @@ class PhotoRenamer:
             self.files_tree.delete(item)
         if invalid_items:
             self.update_file_count()
-
     def on_closing(self):
         """程序关闭时的清理工作"""
         try:
-            # 停止所有操作
             self.stop_all_operations()
-            
-            # 清理缓存
             try:
                 self.cleanup_cache()
             except Exception as e:
                 logging.error(f"清理缓存失败: {e}")
-            
-            # 关闭所有子窗口
             for window in self.toplevel_windows:
                 try:
                     window.destroy()
                 except:
                     pass
-            
-            # 销毁主窗口
             self.root.destroy()
-            
         except Exception as e:
             logging.error(f"关闭程序时出错: {e}")
             self.root.destroy()
-
     def load_or_create_settings(self):
-        """加载或创建配置文件"""
+        """加载或创建设置"""
         try:
-            config = configparser.ConfigParser(interpolation=None)  # 禁用插值
-            
-            # 检查配置文件是否存在
-            if not os.path.exists("QphotoRenamer.ini"):
-                logging.info("配置文件不存在，创建默认配置")
-                # 创建默认配置
+            if not os.path.exists('QphotoRenamer.ini'):
+                config = configparser.ConfigParser()
                 config['General'] = {
                     'language': '简体中文',
                     'prefix': '',
                     'suffix': '',
-                    'skip_extensions': ''
+                    'skip_extensions': '',
+                    'auto_scroll': 'True',
+                    'fast_add_mode': 'False',
+                    'fast_add_threshold': '100'
                 }
-                
-                config['Date'] = {
-                    'date_basis': '拍摄日期',
-                    'alternate_date_basis': '修改日期'
-                }
-                
-                config['FileHandling'] = {
-                    'fast_add_mode': 'false',
-                    'fast_add_threshold': '10',
-                    'name_conflict': 'add_suffix',
-                    'suffix_option': '_001',
-                    'auto_scroll': 'true',
-                    'show_errors_only': 'false'
-                }
-                
-                config['UI'] = {
-                    'window_width': '850',
-                    'window_height': '700'
-                }
-                
-                config['Cache'] = {
-                    'exif_cache_size': '1000',
-                    'status_cache_size': '1000',
-                    'file_hash_cache_size': '1000'
-                }
-                
                 config['Template'] = {
-                    'default_template': '%Y%m%d_%H%M%S',
-                    'template1': '%Y%m%d_%H%M%S',
-                    'template2': '%Y%m%d_%H%M%S_{camera}_{lens}_{iso}_{focal}_{aperture}',
-                    'template3': '%Y%m%d_%H%M%S_{camera}',
-                    'template4': '{camera}_{lens}_{iso}_{focal}_{aperture}',
-                    'template5': '{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}'
+                    'default': '{date}_{time}',
+                    'template1': '{date}_{time}_{camera}',
+                    'template2': '{date}_{time}_{camera}_{lens}',
+                    'template3': '{date}_{time}_{camera}_{lens}_{iso}',
+                    'template4': '{date}_{time}_{camera}_{lens}_{iso}_{focal}',
+                    'template5': '{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}'
                 }
-                
-                # 保存配置文件
-                try:
-                    with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
-                        config.write(f)
-                    logging.info("默认配置文件创建成功")
-                except Exception as e:
-                    logging.error(f"创建默认配置文件失败: {e}")
-                    raise
-            else:
-                logging.info("配置文件已存在，加载现有配置")
-            
-            # 加载配置
+                with open('QphotoRenamer.ini', 'w', encoding='utf-8') as f:
+                    config.write(f)
             self.load_settings()
-                
         except Exception as e:
-            logging.error(f"加载或创建设置时出错: {e}")
-            self.handle_error(e, "加载或创建设置")
-
+            logging.error(f"加载或创建设置失败: {e}")
+            self.template_var.set("{date}_{time}")
+            self.language_var.set("简体中文")
+            self.prefix_var.set("")
+            self.suffix_var.set("")
+            self.skip_extensions_var.set("")
+            self.auto_scroll_var.set(True)
+            self.fast_add_mode_var.set(False)
+            self.fast_add_threshold_var.set(100)
+            self.update_status_bar("ready")  
     def load_settings(self):
         """加载设置"""
         try:
-            # 读取配置文件
             config = configparser.ConfigParser()
             config.read('QphotoRenamer.ini', encoding='utf-8')
-            
-            # 确保[General]和[Template]部分存在
             if not config.has_section('General'):
                 config.add_section('General')
             if not config.has_section('Template'):
                 config.add_section('Template')
-            
-            # 从[General]部分加载基本设置
             self.language_var.set(config.get('General', 'language', fallback='简体中文'))
             self.prefix_var.set(config.get('General', 'prefix', fallback=''))
             self.suffix_var.set(config.get('General', 'suffix', fallback=''))
@@ -487,19 +419,13 @@ class PhotoRenamer:
             self.auto_scroll_var.set(config.getboolean('General', 'auto_scroll', fallback=True))
             self.fast_add_mode_var.set(config.getboolean('General', 'fast_add_mode', fallback=False))
             self.fast_add_threshold_var.set(config.getint('General', 'fast_add_threshold', fallback=100))
-            
-            # 从[Template]部分加载模板
             default_template = config.get('Template', 'default', fallback='{date}_{time}')
             self.template_var.set(default_template)
-            
-            # 加载用户模板（最多5个）
             self.templates = []
             for i in range(1, 6):
                 template = config.get('Template', f'template{i}', fallback='')
                 if template:
                     self.templates.append(template)
-            
-            # 如果没有找到任何模板，使用默认模板
             if not self.templates:
                 self.templates = [
                     '{date}_{time}',
@@ -508,34 +434,23 @@ class PhotoRenamer:
                     '{date}_{time}_{camera}_{lens}_{iso}',
                     '{date}_{time}_{camera}_{lens}_{iso}_{focal}'
                 ]
-            
-            # 更新语言
             self.set_language(self.language_var.get())
-            
         except Exception as e:
             logging.error(f"加载设置失败: {e}")
             self.handle_error(e, "加载设置")
-
     def get_file_hash(self, file_path: str) -> str:
         """计算文件的MD5哈希值"""
         try:
-            # 规范化文件路径
             file_path = os.path.abspath(file_path)
             file_path = os.path.normpath(file_path)
-            
-            # 检查文件是否存在
             if not os.path.exists(file_path):
                 logging.error(f"文件不存在: {file_path}")
                 return ""
-                
-            # 检查文件权限
             if not os.access(file_path, os.R_OK):
                 logging.error(f"无法访问文件: {file_path}，权限不足")
                 return ""
-                
-            # 优化：仅读取文件的前8KB来计算哈希值
             with open(file_path, 'rb') as f:
-                data = f.read(8192)  # 只读取前8KB
+                data = f.read(8192)  
                 return hashlib.md5(data).hexdigest()
         except PermissionError as e:
             logging.error(f"权限错误: {file_path}, 错误: {e}")
@@ -546,76 +461,50 @@ class PhotoRenamer:
         except Exception as e:
             logging.error(f"计算文件哈希值时出错: {file_path}, 错误: {e}")
             return ""
-
     def cleanup_cache(self):
         """清理过期缓存"""
         try:
             current_time = time.time()
-            
-            # 清理错误缓存
             expired_errors = [
                 error_id for error_id, data in self.error_cache.items()
-                if (current_time - data['last_time']) > 3600  # 1小时后过期
+                if (current_time - data['last_time']) > 3600  
             ]
             for error_id in expired_errors:
                 del self.error_cache[error_id]
-                
-            # 清理设置缓存
-            if self._settings_cache and (current_time - self._settings_cache['timestamp']) > 300:  # 5分钟后过期
+            if self._settings_cache and (current_time - self._settings_cache['timestamp']) > 300:  
                 self._settings_cache = None
-                
-            # 清理文件哈希缓存
             if hasattr(self, 'file_hash_cache'):
                 self.file_hash_cache = LRUCache(1000)
-                
-            # 清理EXIF缓存
             if hasattr(self, 'exif_cache'):
                 self.exif_cache = LRUCache(1000)
-                
-            # 清理状态缓存
             if hasattr(self, 'status_cache'):
                 self.status_cache = LRUCache(1000)
-                
-            # 强制进行垃圾回收
             gc.collect()
-            
         except Exception as e:
             logging.error(f"清理缓存时出错: {e}")
-            
         finally:
-            # 设置下一次清理
-            self.root.after(300000, self.cleanup_cache)  # 5分钟后再次清理
-
+            self.root.after(300000, self.cleanup_cache) 
     @lru_cache(maxsize=1000)
     def get_exif_data(self, file_path: str) -> Optional[Dict]:
         try:
-            # 检查是否需要清理缓存
             current_time = time.time()
             if current_time - self.last_cleanup_time > self.cleanup_interval:
                 self.cleanup_cache()
                 self.last_cleanup_time = current_time
-                
-            # 现有的EXIF读取逻辑
             if file_path.lower().endswith('.heic'):
                 return self.get_heic_data(file_path)
-            
             with open(file_path, 'rb') as f:
                 tags = exifread.process_file(f, details=False)
                 if not tags:
                     return None
-                    
                 exif_data = {}
-                
-                # 尝试获取拍摄日期时间
                 date_time_original = None
                 if 'EXIF DateTimeOriginal' in tags:
                     date_time_original = str(tags['EXIF DateTimeOriginal'])
                 elif 'Image DateTime' in tags:
                     date_time_original = str(tags['Image DateTime'])
-                
                 if date_time_original:
                     try:
-                        # 尝试多种日期格式
                         formats = [
                             '%Y:%m:%d %H:%M:%S',
                             '%Y:%m:%d %H:%M',
@@ -630,8 +519,6 @@ class PhotoRenamer:
                                 continue
                     except Exception as e:
                         logging.error(f"解析EXIF日期格式失败: {file_path}, 原始日期字符串: {date_time_original}, 错误: {e}")
-                
-                # 获取其他EXIF信息
                 for tag, value in tags.items():
                     if tag.startswith('EXIF'):
                         exif_data[tag] = str(value)
@@ -649,12 +536,10 @@ class PhotoRenamer:
                         exif_data['ImageWidth'] = str(value)
                     elif tag == 'EXIF ExifImageLength':
                         exif_data['ImageHeight'] = str(value)
-                
                 return exif_data
         except Exception as e:
             self.handle_error(e, f"读取EXIF数据: {file_path}")
             return None
-
     def handle_error(self, error: Exception, context: str):
         """处理错误，显示在状态栏"""
         error_msg = ""
@@ -668,16 +553,11 @@ class PhotoRenamer:
             error_msg = f"数据错误: 无效的数据: {context}\n{str(error)}"
         else:
             error_msg = f"发生未知错误: {context}\n{str(error)}"
-            
         logging.error(error_msg)
         self.update_status_bar(error_msg)
-
     def initialize_ui(self):
-        # 主界面布局
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-        
-        # 日期基准选择框和备选日期基准选择框
         date_basis_frame = ttk.Frame(main_frame)
         date_basis_frame.pack(fill=ttk.X, pady=5)
         self.drag_hint_label = ttk.Label(date_basis_frame, text=self.lang["drag_hint"])
@@ -687,24 +567,21 @@ class PhotoRenamer:
             date_basis_frame,
             textvariable=self.date_basis_var,
             values=[item["display"] for item in self.lang["date_bases"]],
-            state="readonly", width=15)  # 调整宽度
+            state="readonly", width=15)  
         self.date_basis_combobox.pack(side=ttk.LEFT, padx=5)
         self.date_basis_combobox.bind("<<ComboboxSelected>>", self.on_date_basis_selected)
         self.rename_hint_label = ttk.Label(date_basis_frame, text=self.lang["rename_hint"])
         self.rename_hint_label.pack(side=ttk.LEFT, padx=5)
-
         self.alternate_date_var = ttk.StringVar(value=self.lang["alternate_dates"][0]["display"])
         self.alternate_date_combobox = ttk.Combobox(
             date_basis_frame,
             textvariable=self.alternate_date_var,
             values=[item["display"] for item in self.lang["alternate_dates"]],
-            state="readonly", width=15)  # 调整宽度
+            state="readonly", width=15)  
         self.alternate_date_combobox.pack(side=ttk.LEFT, padx=5)
-        self.alternate_date_combobox.bind("<<ComboboxSelected>>", self.on_alternate_date_selected)  # 添加事件绑定
+        self.alternate_date_combobox.bind("<<ComboboxSelected>>", self.on_alternate_date_selected)  
         self.rename_end_hint_label = ttk.Label(date_basis_frame, text=self.lang["rename_end_hint"])
         self.rename_end_hint_label.pack(side=ttk.LEFT, padx=5)
-
-        # 文件列表
         columns = ('filename', 'renamed_name', 'status')
         tree_frame = ttk.Frame(main_frame)
         tree_frame.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
@@ -725,13 +602,9 @@ class PhotoRenamer:
         self.files_tree.bind('<Double-1>', self.open_file)
         self.files_tree.bind('<Button-1>', self.show_exif_info)
         self.files_tree.bind('<ButtonRelease-1>', self.show_omitted_info)
-
-        # 进度条
         self.progress_var = ttk.DoubleVar()
         progress = ttk.Progressbar(main_frame, variable=self.progress_var, maximum=100)
         progress.pack(fill=ttk.X, padx=10, pady=10)
-        
-        # 按钮区域
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=ttk.X, padx=10, pady=10)
         self.start_button = ttk.Button(button_frame, text=self.lang["start_renaming"], command=lambda: self.rename_photos())
@@ -762,8 +635,6 @@ class PhotoRenamer:
         self.update_link.pack(side=ttk.RIGHT, padx=5)
         self.update_link.bind("<Button-1>", lambda e: self.open_update_link())
         self.update_link.text_key = "check_for_updates"
-        
-        # 状态栏
         self.status_bar = ttk.Frame(self.root)
         self.status_bar.pack(side=ttk.BOTTOM, fill=ttk.X)
         self.status_label = ttk.Label(self.status_bar, text=self.lang["ready"], anchor=ttk.W)
@@ -772,60 +643,40 @@ class PhotoRenamer:
         self.file_count_label = ttk.Label(self.status_bar, text="文件总数: 0", anchor=ttk.E)
         self.file_count_label.pack(side=ttk.RIGHT, padx=10)
         self.file_count_label.text_key = "file_count"
-
     def on_date_basis_selected(self, event):
         """当日期基准选择改变时，更新文件列表"""
         try:
-            # 获取当前选择的日期基准
             date_basis = self.date_basis_var.get()
-            
-            # 根据选择的日期基准启用或禁用备选日期下拉框
             if date_basis in ["创建日期", "修改日期"]:
                 self.alternate_date_combobox.configure(state="disabled")
-                # 将备选日期设置为"保留原文件名"
                 self.alternate_date_var.set("保留原文件名")
             else:
                 self.alternate_date_combobox.configure(state="readonly")
-            
-            # 清除缓存，强制重新计算状态
             if hasattr(self, 'status_cache'):
                 self.status_cache.clear()
             if hasattr(self, 'file_hash_cache'):
                 self.file_hash_cache.clear()
-            
-            # 更新文件状态和新名称
             for item in self.files_tree.get_children():
                 try:
                     values = self.files_tree.item(item)['values']
                     if not values or len(values) < 3:
                         continue
-                        
-                    file_path = str(values[0])  # 确保是字符串
+                    file_path = str(values[0])  
                     if not file_path:
                         continue
-                        
-                    # 检查文件是否存在
                     if not os.path.exists(file_path):
-                        # 如果文件不存在，尝试从新名称列获取实际路径
-                        new_name = str(values[1]) if values[1] else ""  # 确保是字符串
+                        new_name = str(values[1]) if values[1] else ""  
                         if new_name and new_name != self.lang["ready_to_rename"]:
                             directory = os.path.dirname(file_path)
                             new_path = os.path.join(directory, new_name)
                             if os.path.exists(new_path):
-                                # 更新树形视图中的文件路径
                                 self.files_tree.item(item, values=(new_path, new_name, values[2]))
                                 file_path = new_path
                             else:
-                                # 如果文件确实不存在，标记为无效
                                 self.files_tree.set(item, 'status', self.lang["file_not_found"])
                                 continue
-                    
                     exif_data = self.get_exif_data(file_path)
-                    
-                    # 检查是否有拍摄日期
                     has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
-                    
-                    # 根据日期基准和文件状态更新状态
                     if date_basis == "拍摄日期":
                         if has_shooting_date:
                             status = self.lang["prepare_rename_by"].format("拍摄日期")
@@ -836,74 +687,49 @@ class PhotoRenamer:
                             else:
                                 status = self.lang["prepare_rename_by"].format(alternate)
                     else:
-                        # 对于其他日期基准，直接使用选择的基准
                         status = self.lang["prepare_rename_by"].format(date_basis)
-                    
                     self.files_tree.set(item, 'status', status)
-                    
-                    # 强制刷新新名称
                     new_name = self.generate_new_name(file_path, exif_data)
-                    if new_name:  # 确保新名称不为空
+                    if new_name:  
                         self.files_tree.set(item, 'renamed_name', new_name)
-                        
                 except Exception as e:
                     logging.error(f"处理文件项时出错: {e}")
                     continue
-            
-            # 更新UI
             self.update_renamed_name_column()
-            self.root.update_idletasks()  # 强制刷新界面
-            
+            self.root.update_idletasks()  
         except Exception as e:
             logging.error(f"更新日期基准选择时出错: {e}")
             self.handle_error(e, "更新日期基准选择")
-
     def on_alternate_date_selected(self, event):
         """当备选日期选择改变时，更新文件列表"""
         try:
-            # 清除缓存，强制重新计算状态
             if hasattr(self, 'status_cache'):
                 self.status_cache.clear()
             if hasattr(self, 'file_hash_cache'):
                 self.file_hash_cache.clear()
-            
-            # 获取当前选择的日期基准和备选日期
             date_basis = self.date_basis_var.get()
             alternate = self.alternate_date_var.get()
-            
-            # 更新文件状态和新名称
             for item in self.files_tree.get_children():
                 try:
                     values = self.files_tree.item(item)['values']
                     if not values or len(values) < 3:
                         continue
-                        
-                    file_path = str(values[0])  # 确保是字符串
+                    file_path = str(values[0])  
                     if not file_path:
                         continue
-                        
-                    # 检查文件是否存在
                     if not os.path.exists(file_path):
-                        # 如果文件不存在，尝试从新名称列获取实际路径
-                        new_name = str(values[1]) if values[1] else ""  # 确保是字符串
+                        new_name = str(values[1]) if values[1] else ""  
                         if new_name and new_name != self.lang["ready_to_rename"]:
                             directory = os.path.dirname(file_path)
                             new_path = os.path.join(directory, new_name)
                             if os.path.exists(new_path):
-                                # 更新树形视图中的文件路径
                                 self.files_tree.item(item, values=(new_path, new_name, values[2]))
                                 file_path = new_path
                             else:
-                                # 如果文件确实不存在，标记为无效
                                 self.files_tree.set(item, 'status', self.lang["file_not_found"])
                                 continue
-                    
                     exif_data = self.get_exif_data(file_path)
-                    
-                    # 检查是否有拍摄日期
                     has_shooting_date = exif_data and 'DateTimeOriginalParsed' in exif_data
-                    
-                    # 根据日期基准和文件状态更新状态
                     if date_basis == "拍摄日期":
                         if has_shooting_date:
                             status = self.lang["prepare_rename_by"].format("拍摄日期")
@@ -913,80 +739,48 @@ class PhotoRenamer:
                             else:
                                 status = self.lang["prepare_rename_by"].format(alternate)
                     else:
-                        # 对于其他日期基准，直接使用选择的基准
                         status = self.lang["prepare_rename_by"].format(date_basis)
-                    
                     self.files_tree.set(item, 'status', status)
-                    
-                    # 强制刷新新名称
                     new_name = self.generate_new_name(file_path, exif_data)
-                    if new_name:  # 确保新名称不为空
+                    if new_name:  
                         self.files_tree.set(item, 'renamed_name', new_name)
-                        
                 except Exception as e:
                     logging.error(f"处理文件项时出错: {e}")
                     continue
-            
-            # 更新UI
             self.update_renamed_name_column()
-            self.root.update_idletasks()  # 强制刷新界面
-            
+            self.root.update_idletasks()  
         except Exception as e:
             logging.error(f"更新备选日期选择时出错: {e}")
             self.handle_error(e, "更新备选日期选择")
-
     def on_template_selected(self, event=None):
         """当选择模板时更新编辑器内容"""
         try:
             selected_template = self.template_combobox.get()
             current_template = self.template_text.get("1.0", tk.END).strip()
-            
-            # 如果选择的不是当前正在编辑的模板
             if selected_template != "(新模板)" and selected_template != current_template:
-                # 检查是否有未保存的修改
                 if self.is_modified:
                     if messagebox.askyesno("未保存的修改", "当前模板有未保存的修改，是否保存？"):
-                        # 如果当前是新模板且用户希望保存
                         if "(新模板)" in self.template_combobox['values'] and self.template_combobox.get() == "(新模板)":
-                            # 保存新模板内容
                             if current_template and current_template not in self.templates:
                                 self.templates.append(current_template)
-                                # 通知用户新模板已保存
                                 self.update_status_bar("新模板已保存")
                         self.save_current_template()
-                
-                # 现在获取并显示选择的模板
                 if selected_template in self.templates:
-                    # 直接更新模板文本
                     self.template_text.delete("1.0", tk.END)
                     self.template_text.insert("1.0", selected_template)
-                    
-                    # 更新默认模板
                     self.default_template = selected_template
-                    
-                    # 更新主程序的模板变量
                     if self.template_var:
                         self.template_var.set(selected_template)
-                    
-                    # 重置修改标志并更新保存的内容
                     self.is_modified = False
                     self.last_saved_content = selected_template
-                    
-                    # 立即更新预览
                     self.update_preview()
-                    
-                    # 更新主程序的文件列表预览
                     if self.main_app and hasattr(self.main_app, 'update_renamed_name_column'):
                         self.main_app.update_renamed_name_column()
-                    
-                    # 更新状态
                     self.update_status_bar(f"已加载模板: {selected_template}")
-                
         except Exception as e:
             error_msg = f"加载模板失败: {str(e)}"
             logging.error(error_msg)
             self.update_status_bar(error_msg)
-
     def generate_new_name(self, file_path, exif_data, add_suffix=True):
         try:
             file_path = os.path.abspath(os.path.normpath(file_path))
@@ -1009,75 +803,130 @@ class PhotoRenamer:
             if date_basis == "拍摄日期":
                 if exif_data and 'DateTimeOriginalParsed' in exif_data:
                     date_obj = exif_data['DateTimeOriginalParsed']
+                    date_obj = date_obj.replace(microsecond=0)
                 else:
                     alternate = self.alternate_date_var.get()
                     if alternate == "保留原文件名":
                         return os.path.basename(file_path)
                     elif alternate == "修改日期":
-                        date_obj = self.get_file_modification_date(file_path)
+                        date_obj = self.get_cached_or_real_modification_date(file_path)
                         if not date_obj:
-                            date_obj = self.get_file_creation_date(file_path)
+                            date_obj = self.get_cached_or_real_creation_date(file_path)
                     elif alternate == "创建日期":
-                        date_obj = self.get_file_creation_date(file_path)
+                        date_obj = self.get_cached_or_real_creation_date(file_path)
                         if not date_obj:
-                            date_obj = self.get_file_modification_date(file_path)
+                            date_obj = self.get_cached_or_real_modification_date(file_path)
                     if not date_obj:
                         return os.path.basename(file_path)
             elif date_basis == "修改日期":
-                date_obj = self.get_file_modification_date(file_path)
+                date_obj = self.get_cached_or_real_modification_date(file_path)
                 if not date_obj:
-                    date_obj = self.get_file_creation_date(file_path)
+                    date_obj = self.get_cached_or_real_creation_date(file_path)
                 if not date_obj:
                     return os.path.basename(file_path)
             elif date_basis == "创建日期":
-                date_obj = self.get_file_creation_date(file_path)
+                date_obj = self.get_cached_or_real_creation_date(file_path)
                 if not date_obj:
-                    date_obj = self.get_file_modification_date(file_path)
+                    date_obj = self.get_cached_or_real_modification_date(file_path)
                 if not date_obj:
                     return os.path.basename(file_path)
             if date_obj:
-                template = template.replace("{date}", date_obj.strftime("%Y%m%d"))
-                template = template.replace("{time}", date_obj.strftime("%H%M%S"))
+                # 使用字典来存储所有可能的变量值
+                variables = {
+                    "{date}": date_obj.strftime("%Y%m%d"),
+                    "{time}": date_obj.strftime("%H%M%S"),
+                    "{original}": os.path.splitext(os.path.basename(file_path))[0]
+                }
+                
+                # 添加 EXIF 数据变量
                 if exif_data:
                     if 'Model' in exif_data:
-                        template = template.replace("{camera}", exif_data['Model'])
+                        variables["{camera}"] = exif_data['Model']
                     if 'LensModel' in exif_data:
-                        template = template.replace("{lens}", exif_data['LensModel'])
+                        variables["{lens}"] = exif_data['LensModel']
                     if 'ISOSpeedRatings' in exif_data:
-                        template = template.replace("{iso}", exif_data['ISOSpeedRatings'])
+                        variables["{iso}"] = exif_data['ISOSpeedRatings']
                     if 'FNumber' in exif_data:
-                        template = template.replace("{aperture}", f"f{exif_data['FNumber']}")
+                        variables["{aperture}"] = f"f{exif_data['FNumber']}"
                     if 'ExposureTime' in exif_data:
-                        template = template.replace("{shutter}", exif_data['ExposureTime'])
-                    if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
-                        template = template.replace("{width}", exif_data['ImageWidth'])
-                        template = template.replace("{height}", exif_data['ImageHeight'])
-                template = template.replace("{original}", os.path.splitext(os.path.basename(file_path))[0])
+                        variables["{shutter}"] = exif_data['ExposureTime']
+                    if 'ImageWidth' in exif_data:
+                        variables["{width}"] = exif_data['ImageWidth']
+                    if 'ImageHeight' in exif_data:
+                        variables["{height}"] = exif_data['ImageHeight']
+                
+                # 按变量长度降序排序，避免部分替换问题
+                sorted_vars = sorted(variables.keys(), key=len, reverse=True)
+                
+                # 替换所有变量
+                new_name = template
+                for var in sorted_vars:
+                    new_name = new_name.replace(var, variables[var])
+                
                 if add_suffix:
                     suffix_style = self.suffix_option_var.get()
-                    base_name = template
+                    base_name = new_name
                     new_name = self.generate_unique_filename(directory, base_name, ext, suffix_style)
                 else:
-                    new_name = template + ext
+                    new_name = new_name + ext
                 return new_name
             else:
                 return os.path.basename(file_path)
         except Exception as e:
             logging.error(f"生成新名称失败: {file_path}, 错误: {e}")
             return os.path.basename(file_path)
-
     def generate_unique_filename(self, directory, base_name, ext, suffix_style):
         """生成唯一文件名，避免批量重命名冲突"""
         try:
-            # 确保目录路径是绝对路径
             directory = os.path.abspath(os.path.normpath(directory))
             
-            # 初始化计数器
-            counter = 1
-            max_counter = 999  # 最大计数器值
+            # 检查日期时间格式
+            date_time_match = re.match(r"(\d{8})_(\d{6})", base_name)
+            if not date_time_match:
+                logging.info(f"文件名 {base_name} 不符合日期时间格式，直接返回")
+                return base_name + ext
+                
+            date_part = date_time_match.group(1)
+            time_part = date_time_match.group(2)
+            logging.info(f"处理文件: {base_name}, 日期: {date_part}, 时间: {time_part}")
             
+            # 获取所有可能的后缀模式
+            suffix_patterns = [
+                r"_\d{3}$",  # _001
+                r"-\d{2}$",  # -01
+                r"_\d+$"     # _1
+            ]
+            
+            # 检查文件是否已经包含任何后缀
+            has_suffix = any(re.search(pattern, base_name) for pattern in suffix_patterns)
+            if has_suffix:
+                logging.info(f"文件名 {base_name} 已包含后缀，直接返回")
+                return base_name + ext
+                
+            existing_files = []
+            for file in os.listdir(directory):
+                if file.endswith(ext):
+                    file_base = os.path.splitext(file)[0]
+                    # 移除任何现有的后缀
+                    for pattern in suffix_patterns:
+                        file_base = re.sub(pattern, '', file_base)
+                    
+                    file_match = re.match(r"(\d{8})_(\d{6})", file_base)
+                    if file_match:
+                        file_date = file_match.group(1)
+                        file_time = file_match.group(2)
+                        if file_date == date_part and file_time == time_part:
+                            if os.path.join(directory, file) != os.path.join(directory, base_name + ext):
+                                existing_files.append(file)
+                                logging.info(f"找到相同时间点的文件: {file}")
+            
+            if not existing_files:
+                logging.info(f"没有找到相同时间点的文件，使用原始名称: {base_name}{ext}")
+                return base_name + ext
+                
+            counter = 1
+            max_counter = 999
             while counter <= max_counter:
-                # 根据不同的后缀样式生成后缀
                 if suffix_style == "_001":
                     suffix = f"_{counter:03d}"
                 elif suffix_style == "-01":
@@ -1086,42 +935,17 @@ class PhotoRenamer:
                     suffix = f"_{counter}"
                 else:
                     suffix = f"_{counter:03d}"
-                    
-                # 生成新文件名
                 new_filename = f"{base_name}{suffix}{ext}"
-                
-                # 确保文件名不超过系统限制
-                if len(new_filename) > 255:
-                    # 如果文件名太长，截断基础名称
-                    max_base_length = 255 - len(suffix) - len(ext)
-                    base_name = base_name[:max_base_length]
-                    new_filename = f"{base_name}{suffix}{ext}"
-                
-                # 检查完整路径是否存在
-                full_path = os.path.join(directory, new_filename)
-                if not os.path.exists(full_path):
+                if not os.path.exists(os.path.join(directory, new_filename)):
+                    logging.info(f"生成新文件名: {new_filename}")
                     return new_filename
-                    
                 counter += 1
-            
-            # 如果超过最大计数器，使用时间戳
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            new_filename = f"{base_name}_{timestamp}{ext}"
-            
-            # 最后一次检查文件名长度
-            if len(new_filename) > 255:
-                max_base_length = 255 - len(timestamp) - len(ext) - 1
-                base_name = base_name[:max_base_length]
-                new_filename = f"{base_name}_{timestamp}{ext}"
-            
-            return new_filename
-            
+                
+            logging.info(f"达到最大计数，使用原始名称: {base_name}{ext}")
+            return base_name + ext
         except Exception as e:
             logging.error(f"生成唯一文件名失败: {e}")
-            # 发生错误时返回带时间戳的文件名
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            return f"{base_name}_{timestamp}{ext}"
-
+            return base_name + ext
     def open_settings(self):
         """打开设置窗口"""
         try:
@@ -1132,44 +956,25 @@ class PhotoRenamer:
             settings_window.transient(self.root)
             settings_window.grab_set()
             self.toplevel_windows.append(settings_window)
-            
             def on_close():
-                # 检查模板编辑器是否有未保存的修改
                 if hasattr(self, 'template_editor') and self.template_editor.has_unsaved_changes():
                     if messagebox.askyesno("未保存的修改", "模板编辑器中有未保存的修改，是否保存？"):
                         self.template_editor.save_current_template()
-                
                 if settings_window in self.toplevel_windows:
                     self.toplevel_windows.remove(settings_window)
                 settings_window.destroy()
-                
             settings_window.protocol("WM_DELETE_WINDOW", on_close)
-            
-            # 创建主Notebook
             notebook = ttk.Notebook(settings_window)
             notebook.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-            
-            # --------------------
-            # 重命名模板标签页
-            # --------------------
             template_frame = ttk.Frame(notebook)
             notebook.add(template_frame, text=self.lang.get("rename_pattern_settings", "重命名格式设置"))
-            
-            # 添加模板编辑器，传入当前语言设置和main_app
             template_editor = TemplateEditor(template_frame, self.template_var, lang=self.lang, main_app=self)
             template_editor.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-            self.template_editor = template_editor  # 保存引用以便在关闭时访问
-            
-            # --------------------
-            # 日期设置标签页
-            # --------------------
+            self.template_editor = template_editor  
             date_frame = ttk.Frame(notebook)
             notebook.add(date_frame, text=self.lang.get("date_settings", "日期设置"))
-            
-            # 日期基准设置
             date_basis_frame = ttk.LabelFrame(date_frame, text=self.lang.get("date_basis", "日期基准"))
             date_basis_frame.pack(fill=ttk.X, padx=10, pady=5)
-            
             date_basis_select_frame = ttk.Frame(date_basis_frame)
             date_basis_select_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(date_basis_select_frame, text=self.lang.get("preferred_date", "首选日期:")).pack(side=ttk.LEFT)
@@ -1178,7 +983,6 @@ class PhotoRenamer:
                                              values=[item['display'] for item in self.lang["date_bases"]],
                                              state="readonly")
             date_basis_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
             alternate_date_select_frame = ttk.Frame(date_basis_frame)
             alternate_date_select_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(alternate_date_select_frame, text=self.lang.get("alternate_date", "备选日期:")).pack(side=ttk.LEFT)
@@ -1187,27 +991,17 @@ class PhotoRenamer:
                                                  values=[item['display'] for item in self.lang["alternate_dates"]],
                                                  state="readonly")
             alternate_date_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
-            # --------------------
-            # 文件处理标签页
-            # --------------------
             file_frame = ttk.Frame(notebook)
             notebook.add(file_frame, text=self.lang.get("file_handling_settings", "文件处理设置"))
-            
-            # 文件过滤设置
             filter_frame = ttk.LabelFrame(file_frame, text=self.lang.get("file_filter", "文件过滤"))
             filter_frame.pack(fill=ttk.X, padx=10, pady=5)
-            
             skip_extensions_frame = ttk.Frame(filter_frame)
             skip_extensions_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(skip_extensions_frame, text=self.lang.get("skip_extensions", "跳过的扩展名:")).pack(side=ttk.LEFT)
             skip_extensions_entry = ttk.Entry(skip_extensions_frame, textvariable=self.skip_extensions_var)
             skip_extensions_entry.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
-            # 冲突处理设置
             conflict_frame = ttk.LabelFrame(file_frame, text=self.lang.get("name_conflict_prompt", "名称冲突处理"))
             conflict_frame.pack(fill=ttk.X, padx=10, pady=5)
-            
             conflict_select_frame = ttk.Frame(conflict_frame)
             conflict_select_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(conflict_select_frame, text=self.lang.get("conflict_handling", "冲突处理:")).pack(side=ttk.LEFT)
@@ -1216,7 +1010,6 @@ class PhotoRenamer:
                                                 values=[item['display'] for item in self.lang["name_conflicts"]],
                                                 state="readonly")
             name_conflict_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
             suffix_option_frame = ttk.Frame(conflict_frame)
             suffix_option_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(suffix_option_frame, text=self.lang.get("suffix_format", "后缀格式:")).pack(side=ttk.LEFT)
@@ -1225,21 +1018,16 @@ class PhotoRenamer:
                                                 values=["_001", "_1", " (1)"],
                                                 state="readonly" if self.name_conflict_var.get() == "增加后缀" else "disabled")
             suffix_option_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
-            # 性能优化设置
             performance_frame = ttk.LabelFrame(file_frame, text=self.lang.get("performance_optimization", "性能优化"))
             performance_frame.pack(fill=ttk.X, padx=10, pady=5)
-            
             fast_add_checkbox = ttk.Checkbutton(performance_frame, 
                                              text=self.lang.get("enable_fast_add", "启用快速添加模式（适用于大量文件）"), 
                                              variable=self.fast_add_mode_var,
                                              command=lambda: self.toggle_fast_add_threshold_entry(threshold_entry))
             fast_add_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-            
             threshold_frame = ttk.Frame(performance_frame)
             threshold_frame.pack(fill=ttk.X, padx=5, pady=5)
             ttk.Label(threshold_frame, text=self.lang.get("file_count_threshold", "文件数量阈值:")).pack(side=ttk.LEFT)
-            
             threshold_validate = (settings_window.register(self.validate_threshold_input), '%P')
             threshold_entry = ttk.Entry(threshold_frame, 
                                      textvariable=self.fast_add_threshold_var, 
@@ -1248,44 +1036,28 @@ class PhotoRenamer:
                                      validatecommand=threshold_validate,
                                      state="normal" if self.fast_add_mode_var.get() else "disabled")
             threshold_entry.pack(side=ttk.LEFT, padx=5)
-            
-            # --------------------
-            # 界面设置标签页
-            # --------------------
             ui_frame = ttk.Frame(notebook)
             notebook.add(ui_frame, text=self.lang.get("ui_settings", "界面设置"))
-            
-            # 语言设置
             language_frame = ttk.LabelFrame(ui_frame, text=self.lang.get("language_settings", "语言设置"))
             language_frame.pack(fill=ttk.X, padx=10, pady=5)
             ttk.Label(language_frame, text=self.lang.get("interface_language", "界面语言:")).pack(side=ttk.LEFT, padx=5)
             language_combobox = ttk.Combobox(language_frame, textvariable=self.language_var, values=list(LANGUAGES.keys()), state="readonly")
             language_combobox.pack(side=ttk.LEFT, fill=ttk.X, expand=True, padx=5)
-            
-            # 其他界面设置
             other_frame = ttk.LabelFrame(ui_frame, text=self.lang.get("other_settings", "其他设置"))
             other_frame.pack(fill=ttk.X, padx=10, pady=5)
-            
             auto_scroll_checkbox = ttk.Checkbutton(other_frame, 
                                              text=self.lang.get("auto_scroll_to_latest", "自动滚动到最新文件"), 
                                              variable=self.auto_scroll_var)
             auto_scroll_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-            
             show_errors_checkbox = ttk.Checkbutton(other_frame, 
                                              text=self.lang.get("show_errors_only", "仅显示错误信息"), 
                                              variable=self.show_errors_only_var)
             show_errors_checkbox.pack(anchor=ttk.W, padx=5, pady=5)
-            
-            # 关于标签页
             about_frame = ttk.Frame(notebook)
             notebook.add(about_frame, text=self.lang.get("about", "关于"))
-            
-            # 软件信息
             about_text = """
-QphotoRenamer 2.4
-
+QphotoRenamer 2.5
 一个简单易用的文件与照片批量重命名工具
-
 功能特点：
 • 支持拖拽文件/文件夹
 • 支持多种日期格式
@@ -1302,47 +1074,36 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
 1. 将文件或文件夹拖放到列表中
 2. 设置重命名格式和选项
 3. 点击"开始重命名"按钮
-
 注意事项：
 • 请确保对目标文件夹有写入权限
 • 建议在重命名前备份重要文件
-• 快速添加模式可能会影响性能
 """
             about_label = ttk.Label(about_frame, text=about_text, justify=ttk.LEFT)
             about_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
-            
-            # 保存设置按钮
             save_button = ttk.Button(settings_window, text=self.lang["save_settings"], 
-                               command=lambda: self.save_settings(self.template_var.get(), 
-                                                               self.language_var.get(),
-                                                               self.prefix_var.get(),  # 使用prefix_var的值
-                                                               self.suffix_var.get(),  # 使用suffix_var的值
-                                                               self.skip_extensions_var.get(),
-                                                               settings_window))
+            command=lambda: self.save_settings(self.template_var.get(), 
+            self.language_var.get(),
+            self.prefix_var.get(),  
+            self.suffix_var.get(),  
+            self.skip_extensions_var.get(),
+            settings_window))
             save_button.pack(pady=10)
             save_button.text_key = "save_settings"
-            
-            # 调整列权重
             template_frame.columnconfigure(0, weight=1)
             date_frame.columnconfigure(0, weight=1)
             file_frame.columnconfigure(0, weight=1)
             ui_frame.columnconfigure(0, weight=1)
             about_frame.columnconfigure(0, weight=1)
-            
-            # 为所有Label/Button/Checkbutton/Combobox加text_key属性
             for widget in settings_window.winfo_children():
                 if isinstance(widget, (ttk.Label, ttk.Button, ttk.Checkbutton)):
                     widget.text_key = widget.cget("text")
-            
         except Exception as e:
             logging.error(f"打开设置窗口时出错: {e}")
             self.handle_error(e, "打开设置窗口")
-
     def toggle_suffix_option_edit(self, suffix_option_combobox):
         """根据命名冲突处理方式启用或禁用后缀选项"""
         logging.info(f"切换后缀选项编辑状态, 当前name_conflict_var值: {self.name_conflict_var.get()}")
         logging.info(f"当前语言'增加后缀'对应的文本: {self.lang['add_suffix_option']}")
-        # 检查命名冲突值是否匹配当前语言中的"增加后缀"文本
         add_suffix_value = self.lang["add_suffix_option"]
         if self.name_conflict_var.get() == add_suffix_value or self.name_conflict_var.get() == "增加后缀":
             logging.info("启用后缀选项编辑")
@@ -1350,56 +1111,40 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         else:
             logging.info("禁用后缀选项编辑")
             suffix_option_combobox.config(state="disabled")
-
     def toggle_fast_add_threshold_entry(self, entry_widget):
         """根据快速添加模式勾选框的状态启用或禁用文件数量阈值输入框"""
         if self.fast_add_mode_var.get():
             entry_widget.config(state="normal")
         else:
             entry_widget.config(state="disabled")
-
     def validate_threshold_input(self, value):
         """验证文件数量阈值输入是否为 1 到 1000 的数字"""
         if value.isdigit():
-            return 1 <= int(value) <= 1000  # 增加最大阈值到1000
+            return 1 <= int(value) <= 1000  
         return False
-
     def save_settings(self, template, language, prefix, suffix, skip_extensions_input, settings_window):
         """保存设置到配置文件"""
         try:
             config = configparser.ConfigParser(interpolation=None)
             if os.path.exists("QphotoRenamer.ini"):
                 config.read("QphotoRenamer.ini", encoding="utf-8")
-            
-            # 更新General部分
             if 'General' not in config:
                 config['General'] = {}
-            
             config['General']['language'] = language
             config['General']['template'] = template
             config['General']['prefix'] = prefix
             config['General']['suffix'] = suffix
             config['General']['skip_extensions'] = skip_extensions_input
-            
-            # 保存配置文件
             with open("QphotoRenamer.ini", "w", encoding="utf-8") as f:
                 config.write(f)
-            
-            # 应用设置
             self._apply_settings(config)
-            
-            # 关闭设置窗口
             settings_window.destroy()
-            
         except Exception as e:
             logging.error(f"保存设置失败: {e}")
             messagebox.showerror("错误", f"保存设置失败: {str(e)}")
-
     def fix_config_encoding(self, config: Dict):
         """修复配置文件中的编码问题（只支持INI格式）"""
-        # 此方法已被删除，不再使用
         pass
-
     def _apply_settings(self, config: Dict):
         """应用设置到界面"""
         if 'Settings' in config:
@@ -1411,32 +1156,24 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             self.skip_extensions = settings.get('skip_extensions', '').split()
             self.skip_extensions_var.set(" ".join([ext[1:] for ext in self.skip_extensions]))
             self.set_language(self.language_var.get())
-
     def update_file_count(self):
         """更新状态栏右侧的文件总数"""
         file_count = len(self.files_tree.get_children())
         self.file_count_label.config(text=self.lang["file_count"].format(file_count))
-
     def select_files(self):
         file_paths = filedialog.askopenfilenames()
         self.add_files_to_queue(file_paths)
-
     def on_drop(self, event):
         paths = re.findall(r'(?<=\{)[^{}]*(?=\})|[^{}\s]+', event.data)
         self.add_files_to_queue(paths)
-
     def add_files_to_queue(self, paths):
         """添加文件到队列"""
         try:
-            # 规范化所有文件路径
             normalized_paths = []
             for path in paths:
                 try:
-                    # 转换为绝对路径
                     abs_path = os.path.abspath(path)
-                    # 规范化路径
                     norm_path = os.path.normpath(abs_path)
-                    # 检查文件是否存在
                     if os.path.exists(norm_path):
                         normalized_paths.append(norm_path)
                     else:
@@ -1444,157 +1181,97 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 except Exception as e:
                     logging.error(f"处理文件路径时出错: {path}, 错误: {e}")
                     continue
-            
             if not normalized_paths:
                 self.update_status_bar("no_valid_files")
                 return
-            
-            # 禁用开始按钮，启用停止按钮
             self.start_button.config(state=ttk.DISABLED)
             self.stop_button.config(state=ttk.NORMAL)
-            
-            # 重置停止事件
             self.stop_event.clear()
-            
-            # 清空文件队列
             while not self.file_queue.empty():
                 self.file_queue.get()
-            
-            # 添加文件到队列
             for path in normalized_paths:
                 if os.path.isfile(path):
                     self.file_queue.put((path, 'file'))
                 elif os.path.isdir(path):
                     self.file_queue.put((path, 'directory'))
-            
-            # 启动处理线程
             if not self.processing_thread or not self.processing_thread.is_alive():
                 self.processing_thread = Thread(target=self.process_files_from_queue)
                 self.processing_thread.start()
-            
-            # 更新状态栏
             self.update_status_bar("processing_in_progress")
-            
         except Exception as e:
             logging.error(f"添加文件到队列时出错: {e}")
             self.handle_error(e, "添加文件到队列")
-            # 恢复按钮状态
             self.start_button.config(state=ttk.NORMAL)
             self.stop_button.config(state=ttk.DISABLED)
-
     def process_files_from_queue(self):
         """处理文件队列中的文件"""
         try:
             processed_count = 0
             total_files = self.file_queue.qsize()
-            
             while not self.file_queue.empty() and not self.stop_event.is_set():
-                path, path_type = self.file_queue.get()
-                
                 try:
+                    path, path_type = self.file_queue.get_nowait()
                     if path_type == 'file':
-                        # 检查文件是否已存在
                         is_duplicate = False
                         for item in self.files_tree.get_children():
                             current_path = self.files_tree.item(item)['values'][0]
                             if path == current_path:
                                 is_duplicate = True
                                 break
-                                
                         if not is_duplicate:
-                            # 添加文件到列表
                             self.add_file_to_list(path)
                             processed_count += 1
-                            
                     elif path_type == 'directory':
-                        # 处理目录
                         self.process_directory(path)
-                        
-                    # 更新状态栏
                     self.root.after(0, lambda: self.update_status_bar("processing_files", 
                         self.file_queue.qsize(), processed_count, total_files))
-                    
+                except queue.Empty:
+                    break
                 except Exception as e:
                     logging.error(f"处理文件时出错: {path}, 错误: {e}")
                     continue
-                
-            # 所有文件处理完成后
             if not self.stop_event.is_set():
                 self.root.after(0, lambda: self.update_status_bar("files_ready"))
-                # 重新启用开始按钮
                 self.root.after(0, lambda: self.start_button.config(state=ttk.NORMAL))
-                # 禁用停止按钮
                 self.root.after(0, lambda: self.stop_button.config(state=ttk.DISABLED))
-                
         except Exception as e:
             logging.error(f"处理文件队列时出错: {e}")
             self.handle_error(e, "处理文件队列")
-            # 发生错误时也要重新启用开始按钮
             self.root.after(0, lambda: self.start_button.config(state=ttk.NORMAL))
             self.root.after(0, lambda: self.stop_button.config(state=ttk.DISABLED))
-
     def process_directory(self, dir_path: str):
         """处理目录，使用生成器减少内存使用"""
         try:
             file_count = 0
-            max_files_per_batch = 200  # 增加每批次处理的文件数到200
             file_batch = []
-            
             for root, _, files in os.walk(dir_path):
-                # 检查是否设置了停止事件
                 if self.stop_event.is_set():
                     return
-                
                 for file in files:
-                    # 再次检查是否设置了停止事件
                     if self.stop_event.is_set():
                         return
-                    
                     file_path = os.path.join(root, file)
-                    file_batch.append(file_path)
+                    self.file_queue.put((file_path, 'file'))
                     file_count += 1
-                    
-                    # 当收集到足够数量的文件时，将它们添加到队列中批量处理
-                    if len(file_batch) >= max_files_per_batch:
-                        for path in file_batch:
-                            self.file_queue.put((path, 'file'))
-                        file_batch = []
-                        
-                        # 更新状态栏，显示处理进度
-                        self.root.after(0, lambda count=file_count: self.update_status_bar("added_files_to_queue", count))
-                        
-                        # 允许UI更新，避免卡顿
-                        self.root.update_idletasks()
-            
-            # 处理剩余的文件
-            for path in file_batch:
-                if self.stop_event.is_set():
-                    return
-                self.file_queue.put((path, 'file'))
-            
-            # 最终更新状态栏
+                    self.root.after(0, lambda count=file_count: self.update_status_bar("added_files_to_queue", count))
+                    self.root.update_idletasks()
             self.root.after(0, lambda count=file_count: self.update_status_bar("added_files_to_queue", count))
-            
         except Exception as e:
             logging.error(f"处理目录时出错: {dir_path}, 错误: {e}")
             self.handle_error(e, f"处理目录: {dir_path}")
-
     def schedule_ui_update(self):
         """调度UI更新"""
         if self._update_timer is None:
             self._update_timer = self.root.after(100, self.process_ui_updates)
-
     def process_ui_updates(self):
         """处理待处理的UI更新"""
         try:
             if 'update_file_count' in self._pending_updates:
                 self.root.after(0, self.update_file_count)
                 self._pending_updates.remove('update_file_count')
-                
             if 'update_status' in self._pending_updates:
                 self.root.after(0, lambda: self.update_status_bar("processing_in_progress"))
                 self._pending_updates.remove('update_status')
-                
             if self._pending_updates:
                 self._update_timer = self.root.after(100, self.process_ui_updates)
             else:
@@ -1602,101 +1279,96 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         except Exception as e:
             logging.error(f"处理UI更新时出错: {e}")
             self.handle_error(e, "处理UI更新")
-
     def add_file_to_list(self, file_path):
         """添加文件到列表，使用线程安全的方式更新UI"""
         try:
-            # 先检查文件是否已存在
             for item in self.files_tree.get_children():
                 if file_path == self.files_tree.item(item, 'values')[0]:
                     logging.info(f"文件已存在，跳过添加: {file_path}")
                     return
-
-            # 获取文件状态和新名称
             file_count = len(self.files_tree.get_children())
-            
-            # 如果启用了快速添加模式且文件数量超过阈值，或者处理的文件总数超过100
-            if self.fast_add_mode_var.get() and (file_count >= self.fast_add_threshold_var.get() or len(self.files_tree.get_children()) > 100):
-                status = self.lang["ready_to_rename"]  # 直接标记为"待重命名"
-                new_name = ""  # 在新名称列中显示占位符
-            else:
-                # 优化：快速检查文件后缀决定是否读取EXIF
-                ext = os.path.splitext(file_path)[1].lower()
-                status = ""
-                new_name = ""
-                
-                try:
-                    # 获取EXIF数据
-                    exif_data = None
-                    if ext in SUPPORTED_IMAGE_FORMATS:
-                        if ext == '.heic':
-                            exif_data = self.get_heic_data(file_path) 
-                        else:
-                            exif_data = self.get_exif_data(file_path)
-                    elif ext in ['.mov', '.mp4', '.avi', '.mkv']:
-                        # 对于视频文件，尝试获取媒体创建日期
-                        date_obj = self.get_video_creation_date(file_path)
-                        if date_obj:
-                            exif_data = {'DateTimeOriginalParsed': date_obj}
-                    
-                    # 生成新名称和状态
-                    if exif_data:
-                        status = self.detect_file_status(file_path, exif_data)
-                        new_name = self.generate_new_name(file_path, exif_data)
+            ext = os.path.splitext(file_path)[1].lower()
+            status = ""
+            new_name = ""
+            try:
+                exif_data = None
+                if ext in SUPPORTED_IMAGE_FORMATS:
+                    if ext == '.heic':
+                        exif_data = self.get_heic_data(file_path) 
                     else:
-                        # 如果没有获取到EXIF数据，使用备用日期
-                        status = self.lang["ready_to_rename"]
-                        new_name = self.generate_new_name(file_path, None)
-                        
-                except Exception as e:
-                    logging.error(f"读取文件信息失败: {file_path}, 错误: {e}")
-                    self.handle_error(e, f"读取文件信息: {file_path}")
+                        exif_data = self.get_exif_data(file_path)
+                elif ext in ['.mov', '.mp4', '.avi', '.mkv']:
+                    date_obj = self.get_video_creation_date(file_path)
+                    if date_obj:
+                        exif_data = {'DateTimeOriginalParsed': date_obj}
+                if exif_data:
+                    status = self.detect_file_status(file_path, exif_data)
+                    new_name = self.generate_new_name(file_path, exif_data)
+                else:
                     status = self.lang["ready_to_rename"]
-                    new_name = os.path.basename(file_path)
-
-            # 使用 after 方法在主线程中更新 UI
+                    new_name = self.generate_new_name(file_path, None)
+            except Exception as e:
+                logging.error(f"读取文件信息失败: {file_path}, 错误: {e}")
+                self.handle_error(e, f"读取文件信息: {file_path}")
+                status = self.lang["ready_to_rename"]
+                new_name = os.path.basename(file_path)
             values = (file_path, new_name, status)
             basename = os.path.basename(file_path)
-            
             def update_ui():
                 try:
                     self.status_label.config(text=f"正在加载: {basename}")
                     self.files_tree.insert('', 'end', values=values)
                     if self.auto_scroll_var.get() and self.files_tree.get_children():
                         self.files_tree.see(self.files_tree.get_children()[-1])
-                    self.update_file_count()  # 更新文件总数
+                    self.update_file_count()  
                 except Exception as e:
                     logging.error(f"更新UI时出错: {e}")
                     self.handle_error(e, "更新UI")
-
             self.root.after(0, update_ui)
-            
         except Exception as e:
             logging.error(f"添加文件到列表时出错: {file_path}, 错误: {e}")
             self.handle_error(e, f"添加文件到列表: {file_path}")
-
     def update_renamed_name_column(self):
-        self.remove_invalid_files()  # 刷新前自动清理无效文件
+        """更新重命名后的文件名列"""
+        self.remove_invalid_files()  
         for item in self.files_tree.get_children():
-            file_path = self.files_tree.item(item)['values'][0]
-            exif_data = None
-            if file_path.lower().endswith('.heic'):
-                exif_data = self.get_heic_data(file_path)
-            elif file_path.lower().endswith(tuple(SUPPORTED_IMAGE_FORMATS)):
-                exif_data = self.get_exif_data(file_path)
-            elif file_path.lower().endswith(('.mov', '.mp4', '.avi', '.mkv')):
-                date_obj = self.get_video_creation_date(file_path)
-                if date_obj:
-                    exif_data = {'DateTimeOriginalParsed': date_obj}
-            new_name = self.generate_new_name(file_path, exif_data)
-            self.files_tree.set(item, 'renamed_name', new_name)
-
+            try:
+                values = self.files_tree.item(item)['values']
+                if not values or len(values) < 3:
+                    continue
+                file_path = str(values[0])  
+                if not file_path:
+                    continue
+                if not os.path.exists(file_path):
+                    new_name = str(values[1]) if values[1] else ""  
+                    if new_name and new_name != self.lang["ready_to_rename"]:
+                        directory = os.path.dirname(file_path)
+                        new_path = os.path.join(directory, new_name)
+                        if os.path.exists(new_path):
+                            self.files_tree.item(item, values=(new_path, new_name, values[2]))
+                            file_path = new_path
+                        else:
+                            continue
+                exif_data = None
+                if file_path.lower().endswith('.heic'):
+                    exif_data = self.get_heic_data(file_path)
+                elif file_path.lower().endswith(tuple(SUPPORTED_IMAGE_FORMATS)):
+                    exif_data = self.get_exif_data(file_path)
+                elif file_path.lower().endswith(('.mov', '.mp4', '.avi', '.mkv')):
+                    date_obj = self.get_video_creation_date(file_path)
+                    if date_obj:
+                        exif_data = {'DateTimeOriginalParsed': date_obj}
+                new_name = self.generate_new_name(file_path, exif_data)
+                if new_name:  
+                    self.files_tree.set(item, 'renamed_name', new_name)
+            except Exception as e:
+                logging.error(f"更新重命名列时出错: {e}")
+                continue
     def set_language(self, language):
         """设置界面语言"""
         self.lang = LANGUAGES[language]
         self.language_var.set(language)
         self.update_status_bar("ready")
-
         def update_widget_text(widget):
             if hasattr(widget, 'text_key'):
                 key = widget.text_key
@@ -1704,7 +1376,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     widget.config(text=self.lang[key])
             for child in widget.winfo_children():
                 update_widget_text(child)
-
         update_widget_text(self.root)
         self.root.title(self.lang["window_title"])
         self.files_tree.heading('filename', text=self.lang["filename"])
@@ -1712,7 +1383,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         self.files_tree.heading('status', text="命名依据")
         self.update_file_count()
         self.update_renamed_name_column()
-        # 同步刷新下拉框内容和选中项及提示语
         self.date_basis_combobox["values"] = [item["display"] for item in self.lang["date_bases"]]
         self.alternate_date_combobox["values"] = [item["display"] for item in self.lang["alternate_dates"]]
         self.date_basis_var.set(self.lang["date_bases"][0]["display"])
@@ -1721,34 +1391,23 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         self.rename_hint_label.config(text=self.lang["rename_hint"])
         self.alternate_date_combobox.config(state="readonly")
         self.rename_end_hint_label.config(text=self.lang["rename_end_hint"])
-
     def rename_photos(self):
         """启动重命名线程，并在操作期间禁用按钮，结束后恢复"""
-        # 重置停止事件
         self.stop_event.clear()
         self.renaming_in_progress = True
         self.start_button.config(state=ttk.DISABLED)
         self.stop_button.config(state=ttk.NORMAL)
         Thread(target=self.rename_photos_thread).start()
-
     def is_already_renamed(self, filename, template, suffix_style, file_path):
         """判断文件名是否已经符合当前模板+后缀规则，并检查日期基准"""
         try:
-            # 获取当前日期基准
             current_date_basis = self.date_basis_var.get()
-            
-            # 从文件名中提取日期部分
             date_match = re.match(r"(\d{8})_(\d{6})", filename)
             if not date_match:
                 return False
-                
             file_date = date_match.group(1)
             file_time = date_match.group(2)
-            
-            # 获取文件的各个日期
             exif_data = self.get_exif_data(file_path)
-            
-            # 根据当前日期基准检查文件名是否匹配
             if current_date_basis == "拍摄日期":
                 if exif_data and 'DateTimeOriginalParsed' in exif_data:
                     exif_date = exif_data['DateTimeOriginalParsed'].strftime("%Y%m%d")
@@ -1769,8 +1428,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     create_time_str = create_date.strftime("%H%M%S")
                     if file_date != create_date_str or file_time != create_time_str:
                         return False
-            
-            # 检查后缀格式
             if suffix_style == "_001":
                 suffix_regex = r"_\d{3}"
             elif suffix_style == "-01":
@@ -1779,15 +1436,12 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 suffix_regex = r"_\d+"
             else:
                 suffix_regex = r"_\d{3}"
-                
             ext_regex = r"\.[a-zA-Z0-9]+$"
             pattern = f"^{file_date}_{file_time}{suffix_regex}{ext_regex}"
             return re.match(pattern, filename) is not None
-            
         except Exception as e:
             logging.error(f"判断文件名格式失败: {filename}, 错误: {e}")
             return False
-
     def rename_photos_thread(self):
         """重命名照片的线程函数，结束后恢复按钮"""
         try:
@@ -1823,20 +1477,16 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             self.update_status_bar("ready")
             self.start_button.config(state=ttk.NORMAL)
             self.stop_button.config(state=ttk.DISABLED)
-
     def sanitize_filename(self, name):
         """过滤文件名中的非法字符并限制长度"""
         illegal_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', '\0']
         for char in illegal_chars:
             name = name.replace(char, '-')
-        
         max_length = 255
         if len(name) > max_length:
             name = name[:max_length-5] + name[-5:]
-        
         name = name.strip().rstrip('.')
         return name
-
     def generate_new_name(self, file_path, exif_data, add_suffix=True):
         try:
             file_path = os.path.abspath(os.path.normpath(file_path))
@@ -1859,75 +1509,130 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             if date_basis == "拍摄日期":
                 if exif_data and 'DateTimeOriginalParsed' in exif_data:
                     date_obj = exif_data['DateTimeOriginalParsed']
+                    date_obj = date_obj.replace(microsecond=0)
                 else:
                     alternate = self.alternate_date_var.get()
                     if alternate == "保留原文件名":
                         return os.path.basename(file_path)
                     elif alternate == "修改日期":
-                        date_obj = self.get_file_modification_date(file_path)
+                        date_obj = self.get_cached_or_real_modification_date(file_path)
                         if not date_obj:
-                            date_obj = self.get_file_creation_date(file_path)
+                            date_obj = self.get_cached_or_real_creation_date(file_path)
                     elif alternate == "创建日期":
-                        date_obj = self.get_file_creation_date(file_path)
+                        date_obj = self.get_cached_or_real_creation_date(file_path)
                         if not date_obj:
-                            date_obj = self.get_file_modification_date(file_path)
+                            date_obj = self.get_cached_or_real_modification_date(file_path)
                     if not date_obj:
                         return os.path.basename(file_path)
             elif date_basis == "修改日期":
-                date_obj = self.get_file_modification_date(file_path)
+                date_obj = self.get_cached_or_real_modification_date(file_path)
                 if not date_obj:
-                    date_obj = self.get_file_creation_date(file_path)
+                    date_obj = self.get_cached_or_real_creation_date(file_path)
                 if not date_obj:
                     return os.path.basename(file_path)
             elif date_basis == "创建日期":
-                date_obj = self.get_file_creation_date(file_path)
+                date_obj = self.get_cached_or_real_creation_date(file_path)
                 if not date_obj:
-                    date_obj = self.get_file_modification_date(file_path)
+                    date_obj = self.get_cached_or_real_modification_date(file_path)
                 if not date_obj:
                     return os.path.basename(file_path)
             if date_obj:
-                template = template.replace("{date}", date_obj.strftime("%Y%m%d"))
-                template = template.replace("{time}", date_obj.strftime("%H%M%S"))
+                # 使用字典来存储所有可能的变量值
+                variables = {
+                    "{date}": date_obj.strftime("%Y%m%d"),
+                    "{time}": date_obj.strftime("%H%M%S"),
+                    "{original}": os.path.splitext(os.path.basename(file_path))[0]
+                }
+                
+                # 添加 EXIF 数据变量
                 if exif_data:
                     if 'Model' in exif_data:
-                        template = template.replace("{camera}", exif_data['Model'])
+                        variables["{camera}"] = exif_data['Model']
                     if 'LensModel' in exif_data:
-                        template = template.replace("{lens}", exif_data['LensModel'])
+                        variables["{lens}"] = exif_data['LensModel']
                     if 'ISOSpeedRatings' in exif_data:
-                        template = template.replace("{iso}", exif_data['ISOSpeedRatings'])
+                        variables["{iso}"] = exif_data['ISOSpeedRatings']
                     if 'FNumber' in exif_data:
-                        template = template.replace("{aperture}", f"f{exif_data['FNumber']}")
+                        variables["{aperture}"] = f"f{exif_data['FNumber']}"
                     if 'ExposureTime' in exif_data:
-                        template = template.replace("{shutter}", exif_data['ExposureTime'])
-                    if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
-                        template = template.replace("{width}", exif_data['ImageWidth'])
-                        template = template.replace("{height}", exif_data['ImageHeight'])
-                template = template.replace("{original}", os.path.splitext(os.path.basename(file_path))[0])
+                        variables["{shutter}"] = exif_data['ExposureTime']
+                    if 'ImageWidth' in exif_data:
+                        variables["{width}"] = exif_data['ImageWidth']
+                    if 'ImageHeight' in exif_data:
+                        variables["{height}"] = exif_data['ImageHeight']
+                
+                # 按变量长度降序排序，避免部分替换问题
+                sorted_vars = sorted(variables.keys(), key=len, reverse=True)
+                
+                # 替换所有变量
+                new_name = template
+                for var in sorted_vars:
+                    new_name = new_name.replace(var, variables[var])
+                
                 if add_suffix:
                     suffix_style = self.suffix_option_var.get()
-                    base_name = template
+                    base_name = new_name
                     new_name = self.generate_unique_filename(directory, base_name, ext, suffix_style)
                 else:
-                    new_name = template + ext
+                    new_name = new_name + ext
                 return new_name
             else:
                 return os.path.basename(file_path)
         except Exception as e:
             logging.error(f"生成新名称失败: {file_path}, 错误: {e}")
             return os.path.basename(file_path)
-
     def generate_unique_filename(self, directory, base_name, ext, suffix_style):
         """生成唯一文件名，避免批量重命名冲突"""
         try:
-            # 确保目录路径是绝对路径
             directory = os.path.abspath(os.path.normpath(directory))
             
-            # 初始化计数器
-            counter = 1
-            max_counter = 999  # 最大计数器值
+            # 检查日期时间格式
+            date_time_match = re.match(r"(\d{8})_(\d{6})", base_name)
+            if not date_time_match:
+                logging.info(f"文件名 {base_name} 不符合日期时间格式，直接返回")
+                return base_name + ext
+                
+            date_part = date_time_match.group(1)
+            time_part = date_time_match.group(2)
+            logging.info(f"处理文件: {base_name}, 日期: {date_part}, 时间: {time_part}")
             
+            # 获取所有可能的后缀模式
+            suffix_patterns = [
+                r"_\d{3}$",  # _001
+                r"-\d{2}$",  # -01
+                r"_\d+$"     # _1
+            ]
+            
+            # 检查文件是否已经包含任何后缀
+            has_suffix = any(re.search(pattern, base_name) for pattern in suffix_patterns)
+            if has_suffix:
+                logging.info(f"文件名 {base_name} 已包含后缀，直接返回")
+                return base_name + ext
+                
+            existing_files = []
+            for file in os.listdir(directory):
+                if file.endswith(ext):
+                    file_base = os.path.splitext(file)[0]
+                    # 移除任何现有的后缀
+                    for pattern in suffix_patterns:
+                        file_base = re.sub(pattern, '', file_base)
+                    
+                    file_match = re.match(r"(\d{8})_(\d{6})", file_base)
+                    if file_match:
+                        file_date = file_match.group(1)
+                        file_time = file_match.group(2)
+                        if file_date == date_part and file_time == time_part:
+                            if os.path.join(directory, file) != os.path.join(directory, base_name + ext):
+                                existing_files.append(file)
+                                logging.info(f"找到相同时间点的文件: {file}")
+            
+            if not existing_files:
+                logging.info(f"没有找到相同时间点的文件，使用原始名称: {base_name}{ext}")
+                return base_name + ext
+                
+            counter = 1
+            max_counter = 999
             while counter <= max_counter:
-                # 根据不同的后缀样式生成后缀
                 if suffix_style == "_001":
                     suffix = f"_{counter:03d}"
                 elif suffix_style == "-01":
@@ -1936,67 +1641,34 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     suffix = f"_{counter}"
                 else:
                     suffix = f"_{counter:03d}"
-                    
-                # 生成新文件名
                 new_filename = f"{base_name}{suffix}{ext}"
-                
-                # 确保文件名不超过系统限制
-                if len(new_filename) > 255:
-                    # 如果文件名太长，截断基础名称
-                    max_base_length = 255 - len(suffix) - len(ext)
-                    base_name = base_name[:max_base_length]
-                    new_filename = f"{base_name}{suffix}{ext}"
-                
-                # 检查完整路径是否存在
-                full_path = os.path.join(directory, new_filename)
-                if not os.path.exists(full_path):
+                if not os.path.exists(os.path.join(directory, new_filename)):
+                    logging.info(f"生成新文件名: {new_filename}")
                     return new_filename
-                    
                 counter += 1
-            
-            # 如果超过最大计数器，使用时间戳
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            new_filename = f"{base_name}_{timestamp}{ext}"
-            
-            # 最后一次检查文件名长度
-            if len(new_filename) > 255:
-                max_base_length = 255 - len(timestamp) - len(ext) - 1
-                base_name = base_name[:max_base_length]
-                new_filename = f"{base_name}_{timestamp}{ext}"
-            
-            return new_filename
-            
+                
+            logging.info(f"达到最大计数，使用原始名称: {base_name}{ext}")
+            return base_name + ext
         except Exception as e:
             logging.error(f"生成唯一文件名失败: {e}")
-            # 发生错误时返回带时间戳的文件名
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            return f"{base_name}_{timestamp}{ext}"
-
+            return base_name + ext
     def update_caches_on_rename(self, old_path, new_path):
         """重命名后同步所有缓存key，保持界面和数据一致"""
         try:
-            # 更新 file_info_cache
             info = self.file_info_cache.get(old_path)
             if info:
-                # 重新获取文件信息以确保数据是最新的
                 new_info = self.cache_file_info(new_path)
                 if new_info:
                     self.file_info_cache.set(new_path, new_info)
                 self.file_info_cache.remove(old_path)
-            
-            # 更新 exif_cache
             exif = self.exif_cache.get(old_path)
             if exif is not None:
                 self.exif_cache.put(new_path, exif)
                 self.exif_cache.put(old_path, None)
-            
-            # 更新 status_cache
             status = self.status_cache.get(old_path)
             if status is not None:
                 self.status_cache.put(new_path, status)
                 self.status_cache.put(old_path, None)
-            
-            # 更新 file_hash_cache
             old_hash = self.get_file_hash(old_path)
             new_hash = self.get_file_hash(new_path)
             if old_hash:
@@ -2006,34 +1678,140 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     self.file_hash_cache.put(old_hash, None)
         except Exception as e:
             logging.error(f"更新缓存失败: {old_path} -> {new_path}, 错误: {e}")
-
     def safe_rename_file(self, source_path: str, target_path: str) -> bool:
         """安全地重命名文件，保留原始文件的创建日期和修改日期"""
         try:
-            import shutil
+            # 检查源文件是否存在
+            if not os.path.exists(source_path):
+                logging.error(f"源文件不存在: {source_path}")
+                return False
+                
+            # 检查源文件是否可读
+            if not os.access(source_path, os.R_OK):
+                logging.error(f"源文件不可读: {source_path}")
+                return False
+                
+            # 检查目标目录是否可写
+            target_dir = os.path.dirname(target_path)
+            if not os.access(target_dir, os.W_OK):
+                logging.error(f"目标目录不可写: {target_dir}")
+                return False
+                
+            # 检查磁盘空间
+            source_size = os.path.getsize(source_path)
+            free_space = shutil.disk_usage(target_dir).free
+            if free_space < source_size:
+                logging.error(f"目标磁盘空间不足: {target_dir}")
+                return False
+                
+            # 如果源文件和目标文件是同一个文件，直接返回成功
+            if os.path.exists(target_path) and os.path.samefile(source_path, target_path):
+                return True
+                
+            # 创建临时文件
+            temp_path = target_path + '.tmp'
+            backup_path = source_path + '.bak'
             
-            # 使用shutil.copy2来复制文件，这会保留所有元数据
-            shutil.copy2(source_path, target_path)
-            
-            # 删除原始文件
-            os.remove(source_path)
-            
-            return True
-            
+            try:
+                # 先备份源文件
+                shutil.copy2(source_path, backup_path)
+                
+                # 验证备份文件
+                if not os.path.exists(backup_path) or os.path.getsize(backup_path) != source_size:
+                    raise Exception("备份文件验证失败")
+                    
+                # 复制到临时文件
+                shutil.copy2(source_path, temp_path)
+                
+                # 验证临时文件
+                if not os.path.exists(temp_path) or os.path.getsize(temp_path) != source_size:
+                    raise Exception("临时文件验证失败")
+                    
+                # 如果目标文件存在，先备份
+                target_backup = None
+                if os.path.exists(target_path):
+                    target_backup = target_path + '.bak'
+                    os.rename(target_path, target_backup)
+                    
+                try:
+                    # 重命名临时文件为目标文件
+                    os.rename(temp_path, target_path)
+                    
+                    # 验证目标文件
+                    if not os.path.exists(target_path) or os.path.getsize(target_path) != source_size:
+                        raise Exception("目标文件验证失败")
+                        
+                    # 删除源文件
+                    os.remove(source_path)
+                    
+                    # 清理备份文件
+                    if os.path.exists(backup_path):
+                        os.remove(backup_path)
+                    if target_backup and os.path.exists(target_backup):
+                        os.remove(target_backup)
+                        
+                    return True
+                    
+                except Exception as e:
+                    # 如果重命名失败，尝试恢复
+                    if os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                        except:
+                            pass
+                    if target_backup and os.path.exists(target_backup):
+                        try:
+                            os.rename(target_backup, target_path)
+                        except:
+                            pass
+                    # 恢复源文件
+                    if os.path.exists(backup_path):
+                        try:
+                            shutil.copy2(backup_path, source_path)
+                        except:
+                            pass
+                    raise e
+                    
+            except Exception as e:
+                # 清理所有临时文件
+                for path in [temp_path, backup_path]:
+                    if os.path.exists(path):
+                        try:
+                            os.remove(path)
+                        except:
+                            pass
+                raise e
+                
         except Exception as e:
             logging.error(f"重命名文件失败: {source_path} -> {target_path}, 错误: {e}")
             return False
-
     def rename_photo(self, file_path: str, item: str) -> tuple:
         try:
+            # 检查文件是否存在
+            if not os.path.exists(file_path):
+                return False, self.lang["file_not_found"]
+                
+            # 检查文件是否可读
+            if not os.access(file_path, os.R_OK):
+                return False, self.lang["file_not_readable"]
+                
+            # 检查文件是否被其他程序占用
+            try:
+                with open(file_path, 'a+b') as f:
+                    pass
+            except PermissionError:
+                return False, self.lang["file_in_use"]
+                
             # 获取文件信息
             exif_data = self.get_exif_data(file_path)
             date_basis = self.date_basis_var.get()
             date_obj = None
-
+            
+            # 根据日期基准获取日期
             if date_basis == "拍摄日期":
                 if exif_data and 'DateTimeOriginalParsed' in exif_data:
                     date_obj = exif_data['DateTimeOriginalParsed']
+                    date_obj = date_obj.replace(microsecond=0)
                 else:
                     alternate = self.alternate_date_var.get()
                     if alternate == "保留原文件名":
@@ -2046,9 +1824,7 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                         date_obj = self.get_cached_or_real_creation_date(file_path)
                         if not date_obj:
                             date_obj = self.get_cached_or_real_modification_date(file_path)
-                    
                     if not date_obj:
-                        # 如果备选日期也获取失败，返回保留原文件名
                         return True, os.path.basename(file_path)
             elif date_basis == "修改日期":
                 date_obj = self.get_cached_or_real_modification_date(file_path)
@@ -2062,68 +1838,81 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     date_obj = self.get_cached_or_real_modification_date(file_path)
                 if not date_obj:
                     return False, self.lang["rename_skipped_no_date"]
-
-            # 生成新名称
+                    
+            # 生成新文件名
             new_name = self.generate_new_name(file_path, exif_data)
             if not new_name:
                 return False, self.lang["rename_skipped_no_name"]
-
-            # 检查目标文件是否已存在
+                
+            # 检查新文件名是否合法
+            if not self.sanitize_filename(new_name):
+                return False, self.lang["invalid_filename"]
+                
             directory = os.path.dirname(file_path)
             target_path = os.path.join(directory, new_name)
-            if os.path.exists(target_path) and not os.path.samefile(file_path, target_path):
-                return False, self.lang["rename_skipped_exists"]
-
+            
+            # 检查目标文件是否存在
+            if os.path.exists(target_path):
+                if os.path.samefile(file_path, target_path):
+                    # 如果是同一个文件，直接返回成功
+                    return True, new_name
+                else:
+                    # 如果目标文件存在但不是同一个文件，生成新的唯一文件名
+                    ext = os.path.splitext(new_name)[1]
+                    base_name = os.path.splitext(new_name)[0]
+                    suffix_style = self.suffix_option_var.get()
+                    new_name = self.generate_unique_filename(directory, base_name, ext, suffix_style)
+                    target_path = os.path.join(directory, new_name)
+                    
+            # 检查目标目录是否可写
+            if not os.access(directory, os.W_OK):
+                return False, self.lang["directory_not_writable"]
+                
+            # 检查磁盘空间
+            source_size = os.path.getsize(file_path)
+            free_space = shutil.disk_usage(directory).free
+            if free_space < source_size:
+                return False, self.lang["insufficient_disk_space"]
+                
             # 执行重命名
             if self.safe_rename_file(file_path, target_path):
+                # 更新缓存
+                self.update_caches_on_rename(file_path, target_path)
                 return True, new_name
             else:
-                return False, self.lang["rename_skipped_no_name"]
-
+                return False, self.lang["rename_failed"]
+                
         except Exception as e:
             logging.error(f"重命名文件失败: {file_path}, 错误: {e}")
             return False, str(e)
-
     def get_heic_data(self, file_path):
         """获取 HEIC 文件的 EXIF 信息，并缓存结果"""
-        # 检查缓存
         cached_data = self.exif_cache.get(file_path)
         if cached_data:
             return cached_data
-
-        # 优化：对于HEIC文件，也先检查文件名是否已包含日期格式
         filename = os.path.basename(file_path)
         for date_format in COMMON_DATE_FORMATS:
             try:
                 date_pattern = date_format.replace('%Y', r'(\d{4})').replace('%m', r'(\d{2})').replace('%d', r'(\d{2})')
                 date_pattern = date_pattern.replace('%H', r'(\d{2})').replace('%M', r'(\d{2})').replace('%S', r'(\d{2})')
-                
                 if re.match(date_pattern, os.path.splitext(filename)[0]):
                     return None
             except:
                 pass
-
         try:
             heif_file = pillow_heif.read_heif(file_path)
             if 'exif' not in heif_file.info:
-                # 如果没有EXIF信息，缓存空结果并返回
                 self.exif_cache.put(file_path, {})
                 return {}
-                
             exif_dict = piexif.load(heif_file.info['exif'])
             exif_data = {}
             if 'Exif' in exif_dict and piexif.ExifIFD.DateTimeOriginal in exif_dict['Exif']:
                 try:
                     date_str = exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal].decode('utf-8')
-                    
-                    # 修复：处理包含"上午"/"下午"等中文时间格式的情况
                     date_str = date_str.replace("上午", "").replace("下午", "").strip()
-                    
-                    # 尝试多种日期格式
                     try:
                         exif_data['DateTimeOriginalParsed'] = datetime.datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
                     except ValueError:
-                        # 尝试其他可能的格式
                         formats = ['%Y:%m:%d %H:%M', '%Y/%m/%d %H:%M:%S', '%Y/%m/%d %H:%M']
                         for fmt in formats:
                             try:
@@ -2131,15 +1920,11 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                                 break
                             except ValueError:
                                 continue
-                    
-                    # 获取到拍摄日期后就缓存并返回
                     self.exif_cache.put(file_path, exif_data)
                     return exif_data
                 except Exception as e:
                     logging.error(f"解析HEIC日期格式失败: {file_path}, 原始日期字符串: {date_str}, 错误: {e}")
-                    # 尝试从文件名获取日期
                     try:
-                        # 从文件名提取日期信息
                         match = re.search(r'(\d{4})(\d{2})(\d{2})[-_]?(\d{2})(\d{2})(\d{2})', filename)
                         if match:
                             year, month, day, hour, minute, second = map(int, match.groups())
@@ -2149,50 +1934,33 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                             return exif_data
                     except Exception:
                         pass
-            
-            # 如果没有拍摄日期，缓存空结果
             self.exif_cache.put(file_path, {})
             return {}
         except Exception as e:
             logging.error(f"读取HEIC数据失败: {file_path}, 错误: {e}")
             self.handle_error(e, f"读取HEIC数据: {file_path}")
-            # 发生错误时，缓存空结果避免重复尝试读取
             self.exif_cache.put(file_path, {})
         return {}
-
     def create_tooltip(self, widget, text):
         """创建工具提示，鼠标移出或点击时关闭"""
-        # 如果已经存在工具提示窗口，则销毁它
         if hasattr(widget, 'tooltip_window') and widget.tooltip_window:
             widget.tooltip_window.destroy()
-
-        # 创建提示框
         tooltip = Toplevel(widget)
-        tooltip.wm_overrideredirect(True)  # 去掉窗口边框
+        tooltip.wm_overrideredirect(True)  
         x = widget.winfo_pointerx() + 10
         y = widget.winfo_pointery() + 10
         tooltip.geometry(f"+{x}+{y}")
-
-        # 添加提示内容
         label = Label(tooltip, text=text, background="lightyellow", relief="solid", borderwidth=1, anchor='w', justify='left')
         label.pack(fill='both', expand=True)
-
-        # 绑定点击事件以关闭提示框
         label.bind("<Button-1>", lambda e: tooltip.destroy())
-
-        # 绑定鼠标移出事件以关闭提示框
         tooltip.bind("<Leave>", lambda e: tooltip.destroy())
-
-        # 将提示框保存到 widget 属性中
         widget.tooltip_window = tooltip
-
     def show_exif_info(self, event):
         """显示文件的 EXIF 信息"""
         item = self.files_tree.identify_row(event.y)
         if not item:
             return
         file_path = self.files_tree.item(item, 'values')[0]
-        # 直接使用file_path，无需original_to_new_mapping
         def process_info():
             try:
                 exif_data = None
@@ -2206,80 +1974,47 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 logging.error(f"显示EXIF信息出错: {e}")
                 self.handle_error(e, "显示EXIF信息")
         Thread(target=process_info, daemon=True).start()
-
     def extract_exif_info(self, file_path, exif_data):
         """提取 EXIF 信息并生成字符串"""
         exif_info = ""
-        
-        # 原文件名
         original_name = os.path.basename(file_path)
         exif_info += f"旧名称: {original_name}\n"
-
-        # 新名称
         new_name = self.generate_new_name(file_path, exif_data)
         exif_info += f"新名称: {new_name}\n"
-
-        # 修改日期
         mod_date = self.get_file_modification_date(file_path)
         if mod_date:
             exif_info += f"修改日期: {mod_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-        # 创建日期
         create_date = self.get_file_creation_date(file_path)
         if create_date:
             exif_info += f"创建日期: {create_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-        # 如果存在 EXIF 信息，则显示更多详细信息
         if exif_data:
-            # 拍摄日期
             if 'DateTimeOriginalParsed' in exif_data:
                 exif_info += f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}\n"
-
-            # 设备
             if 'Model' in exif_data:
                 exif_info += f"拍摄设备: {exif_data['Model']}"
-
-            # 镜头
             if 'LensModel' in exif_data:
                 exif_info += f"镜头: {exif_data['LensModel']}\n"
-
-            # ISO
             if 'ISOSpeedRatings' in exif_data:
                 exif_info += f"ISO: {exif_data['ISOSpeedRatings']}\n"
-
-            # 光圈
             if 'FNumber' in exif_data:
                 exif_info += f"光圈: f/{exif_data['FNumber']}\n"
-
-            # 快门速度
             if 'ExposureTime' in exif_data:
                 exif_info += f"快门速度: {exif_data['ExposureTime']} 秒\n"
-
-            # 分辨率
             if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
                 exif_info += f"分辨率: {exif_data['ImageWidth']}x{exif_data['ImageHeight']}\n"
-
         return exif_info
-
     def get_file_modification_date(self, file_path: str) -> Optional[datetime.datetime]:
         """获取文件修改日期"""
         try:
-            # 规范化文件路径
             file_path = os.path.normpath(file_path)
-            # 确保路径使用正确的斜杠
             if sys.platform == 'win32':
                 file_path = file_path.replace('/', '\\')
-            
-            # 检查文件是否存在
             if not os.path.exists(file_path):
                 logging.error(f"文件不存在: {file_path}")
                 return None
-                
-            # 检查文件权限
             if not os.access(file_path, os.R_OK):
                 logging.error(f"无法访问文件: {file_path}，权限不足")
                 return None
-                
             modification_time = os.path.getmtime(file_path)
             return datetime.datetime.fromtimestamp(modification_time)
         except PermissionError as e:
@@ -2291,26 +2026,18 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         except Exception as e:
             logging.error(f"获取文件修改日期失败: {file_path}, 错误: {e}")
             return None
-
     def get_file_creation_date(self, file_path: str) -> Optional[datetime.datetime]:
         """获取文件创建日期"""
         try:
-            # 规范化文件路径
             file_path = os.path.normpath(file_path)
-            # 确保路径使用正确的斜杠
             if sys.platform == 'win32':
                 file_path = file_path.replace('/', '\\')
-            
-            # 检查文件是否存在
             if not os.path.exists(file_path):
                 logging.error(f"文件不存在: {file_path}")
                 return None
-                
-            # 检查文件权限
             if not os.access(file_path, os.R_OK):
                 logging.error(f"无法访问文件: {file_path}，权限不足")
                 return None
-                
             if sys.platform == 'win32':
                 creation_time = os.path.getctime(file_path)
                 return datetime.datetime.fromtimestamp(creation_time)
@@ -2330,34 +2057,25 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         except Exception as e:
             logging.error(f"获取文件创建日期失败: {file_path}, 错误: {e}")
             return None
-
     def remove_file(self, event):
         selected_items = self.files_tree.selection()
         for item in selected_items:
             self.files_tree.delete(item)
-        self.update_file_count()  # 更新文件总数
-
+        self.update_file_count()  
     def stop_renaming(self):
         self.stop_event.set()
-
     def clear_file_list(self):
         self.files_tree.delete(*self.files_tree.get_children())
-        self.update_file_count()  # 更新文件总数
-
+        self.update_file_count()  
     def open_file(self, event):
         """双击打开文件"""
         item = self.files_tree.identify_row(event.y)
         if not item:
             return
-            
         file_path = self.files_tree.item(item, 'values')[0]
         new_name = self.files_tree.item(item, 'values')[1]
-
-        # 检查文件是否存在，如果不存在，尝试使用新名称构建路径
         if not os.path.exists(file_path):
-            # 获取文件所在目录
             directory = os.path.dirname(file_path)
-            # 如果新名称存在且不是"准备重命名"，则使用新名称构建路径
             if new_name and new_name != self.lang["ready_to_rename"]:
                 new_path = os.path.join(directory, new_name)
                 if os.path.exists(new_path):
@@ -2368,18 +2086,16 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             else:
                 self.update_status_bar("file_not_found", file_path)
                 return
-
         try:
             if sys.platform == 'win32':
                 os.startfile(file_path)
-            elif sys.platform == 'darwin':  # macOS
+            elif sys.platform == 'darwin':  
                 subprocess.run(['open', file_path])
-            else:  # Linux
+            else:  
                 subprocess.run(['xdg-open', file_path])
         except Exception as e:
             logging.error(f"打开文件失败: {file_path}, 错误: {e}")
             self.handle_error(e, "打开文件")
-
     def update_status_bar(self, message_key, *args):
         """更新状态栏消息"""
         if message_key in self.lang:
@@ -2387,33 +2103,26 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             self.status_label.config(text=message)
         else:
             self.status_label.config(text=message_key)
-
     def show_help(self):
         help_window = Toplevel(self.root)
         help_window.title(self.lang["help"])
         help_text = self.lang["help_text"]
         help_label = Label(help_window, text=help_text, justify='left')
         help_label.pack(padx=10, pady=10)
-
     def load_language(self):
         if os.path.exists("QphotoRenamer.ini"):
             with open("QphotoRenamer.ini", "r", encoding="utf-8") as f:
                 config = json.load(f)
                 return config.get("language", "简体中文")
         return "简体中文"
-
     def open_update_link(self):
         webbrowser.open("https://github.com/Qwejay/QphotoRenamer")
-
     def detect_file_status(self, file_path: str, exif_data: Optional[Dict] = None) -> str:
         """检测文件状态，使用缓存机制"""
         try:
-            # 获取日期基准
             date_basis = self.date_basis_var.get()
             used_basis = None
             date_obj = None
-
-            # 获取日期对象的通用函数
             def get_date_by_basis(basis):
                 if basis == "拍摄日期":
                     if exif_data and 'DateTimeOriginalParsed' in exif_data:
@@ -2436,11 +2145,7 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                         return "修改日期", date
                     return None, None
                 return None, None
-
-            # 首先尝试使用第一下拉框的选择
             used_basis, date_obj = get_date_by_basis(date_basis)
-
-            # 如果是拍摄日期但没有日期，则使用第二下拉框的选择
             if date_basis == "拍摄日期" and not date_obj:
                 alternate = self.alternate_date_var.get()
                 if alternate == "保留原文件名":
@@ -2448,15 +2153,12 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 used_basis, date_obj = get_date_by_basis(alternate)
                 if not date_obj:
                     return self.lang["prepare_rename_keep_name"]
-
             if used_basis:
                 return self.lang["prepare_rename_by"].format(used_basis)
             return self.lang["ready_to_rename"]
-
         except Exception as e:
             logging.error(f"检测文件状态失败: {file_path}, 错误: {e}")
             return self.lang["prepare_rename_keep_name"]
-
     def get_video_creation_date(self, file_path):
         """获取视频文件的媒体创建日期"""
         try:
@@ -2472,21 +2174,15 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
         except Exception as e:
             logging.error(f"获取视频文件创建日期失败: {file_path}, 错误: {e}")
         return None
-
     def show_omitted_info(self, event):
         """点击某一行时显示快速添加模式所省略的内容"""
         item = self.files_tree.identify_row(event.y)
         if not item:
             return
-            
         file_path = self.files_tree.item(item, 'values')[0]
         new_name = self.files_tree.item(item, 'values')[1]
-
-        # 检查文件是否存在，如果不存在，尝试使用新名称构建路径
         if not os.path.exists(file_path):
-            # 获取文件所在目录
             directory = os.path.dirname(file_path)
-            # 如果新名称存在且不是"准备重命名"，则使用新名称构建路径
             if new_name and new_name != self.lang["ready_to_rename"]:
                 new_path = os.path.join(directory, new_name)
                 if os.path.exists(new_path):
@@ -2497,26 +2193,21 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             else:
                 self.create_tooltip(event.widget, f"文件不存在: {file_path}")
                 return
-
-        # 开始一个新线程来处理
         def process_info():
             try:
-                # 获取文件状态
                 try:
                     stat = os.stat(file_path)
                     modification_date = datetime.datetime.fromtimestamp(stat.st_mtime)
-                    if hasattr(stat, 'st_birthtime'):  # macOS
+                    if hasattr(stat, 'st_birthtime'):  
                         creation_date = datetime.datetime.fromtimestamp(stat.st_birthtime)
-                    elif hasattr(stat, 'st_ctime'):    # Windows
+                    elif hasattr(stat, 'st_ctime'):    
                         creation_date = datetime.datetime.fromtimestamp(stat.st_ctime)
-                    else:                              # Linux
+                    else:                              
                         creation_date = datetime.datetime.fromtimestamp(stat.st_ctime)
                 except (OSError, AttributeError) as e:
                     logging.error(f"获取文件状态失败: {file_path}, 错误: {e}")
                     self.root.after(0, lambda: self.create_tooltip(event.widget, f"获取文件状态失败: {str(e)}"))
                     return
-
-                # 获取EXIF数据
                 exif_data = None
                 try:
                     if file_path.lower().endswith('.heic'):
@@ -2526,57 +2217,42 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 except Exception as e:
                     logging.error(f"获取EXIF数据失败: {file_path}, 错误: {e}")
                     exif_data = None
-
-                # 如果新名称为空（快速添加模式跳过），则动态生成新名称
                 if not new_name:
                     generated_name = self.generate_new_name(file_path, exif_data)
                     self.root.after(0, lambda: self.files_tree.set(item, 'renamed_name', generated_name))
                     info = self.extract_omitted_info(file_path, exif_data, generated_name)
                 else:
                     info = self.extract_omitted_info(file_path, exif_data, new_name)
-
-                # 显示信息
                 self.root.after(0, lambda: self.create_tooltip(event.widget, info))
             except Exception as e:
                 logging.error(f"显示文件信息出错: {e}")
                 self.handle_error(e, "显示文件信息")
-                
         Thread(target=process_info, daemon=True).start()
-
     def extract_omitted_info(self, file_path, exif_data, new_name):
         """提取被省略的信息"""
         try:
             info = []
-            
-            # 获取文件状态
             try:
                 stat = os.stat(file_path)
-                
-                # 获取修改日期
                 try:
                     mtime = stat.st_mtime
                     modification_date = datetime.datetime.fromtimestamp(mtime)
                     info.append(f"修改日期: {modification_date.strftime('%Y-%m-%d %H:%M:%S')}")
                 except (AttributeError, OSError):
                     pass
-                
-                # 获取创建日期
                 try:
-                    if hasattr(stat, 'st_birthtime'):  # macOS
+                    if hasattr(stat, 'st_birthtime'):  
                         birth_time = stat.st_birthtime
-                    elif hasattr(stat, 'st_ctime'):    # Windows
+                    elif hasattr(stat, 'st_ctime'):    
                         birth_time = stat.st_ctime
-                    else:                              # Linux
+                    else:                              
                         birth_time = stat.st_ctime
                     creation_date = datetime.datetime.fromtimestamp(birth_time)
                     info.append(f"创建日期: {creation_date.strftime('%Y-%m-%d %H:%M:%S')}")
                 except (AttributeError, OSError):
                     pass
-                
             except (OSError, AttributeError):
                 pass
-            
-            # 获取EXIF信息
             if exif_data:
                 if 'DateTimeOriginalParsed' in exif_data:
                     info.append(f"拍摄日期: {exif_data['DateTimeOriginalParsed'].strftime('%Y-%m-%d %H:%M:%S')}")
@@ -2594,54 +2270,85 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     info.append(f"ISO: {exif_data['ISOSpeedRatings']}")
                 if 'FocalLength' in exif_data:
                     info.append(f"焦距: {exif_data['FocalLength']}mm")
-            
-            # 添加新名称信息
             if new_name and new_name != self.lang["ready_to_rename"]:
                 info.append(f"新名称: {new_name}")
-            
             return "\n".join(info)
         except Exception as e:
             logging.error(f"提取被省略信息失败: {file_path}, 错误: {e}")
             return f"提取信息失败: {str(e)}"
-
-    # 添加新方法
     def stop_all_operations(self):
         """停止所有操作，包括文件加载、重命名等"""
         try:
-            # 设置停止标志
             self.stop_event.set()
-            
-            # 停止更新线程
             self.stop_update_event.set()
-            
-            # 等待所有线程完成
             if self.update_thread and self.update_thread.is_alive():
                 self.update_thread.join(timeout=1.0)
-            
-            # 清空更新队列
             while not self.update_queue.empty():
                 try:
                     self.update_queue.get_nowait()
                     self.update_queue.task_done()
                 except queue.Empty:
                     break
-            
-            # 重置停止标志
             self.reset_stop_event()
-            
         except Exception as e:
             logging.error(f"停止操作时发生错误: {e}")
-
     def reset_stop_event(self):
         """重置停止事件"""
         self.stop_event.clear()
         self.stop_update_event.clear()
-
     def rename_photo_with_name(self, file_path, item, new_name):
         try:
+            # 规范化路径
             file_path = os.path.normpath(file_path)
             directory = os.path.normpath(os.path.dirname(file_path))
             new_file_path = os.path.normpath(os.path.join(directory, new_name))
+            
+            # 检查源文件是否存在
+            if not os.path.exists(file_path):
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["file_not_found"])
+                    self.files_tree.item(item, tags=('failed',))
+                    self.unrenamed_files += 1
+                return False, None
+                
+            # 检查源文件是否可读
+            if not os.access(file_path, os.R_OK):
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["file_not_readable"])
+                    self.files_tree.item(item, tags=('failed',))
+                    self.unrenamed_files += 1
+                return False, None
+                
+            # 检查文件是否被其他程序占用
+            try:
+                with open(file_path, 'a+b') as f:
+                    pass
+            except PermissionError:
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["file_in_use"])
+                    self.files_tree.item(item, tags=('failed',))
+                    self.unrenamed_files += 1
+                return False, None
+                
+            # 检查目标目录是否可写
+            if not os.access(directory, os.W_OK):
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["directory_not_writable"])
+                    self.files_tree.item(item, tags=('failed',))
+                    self.unrenamed_files += 1
+                return False, None
+                
+            # 检查磁盘空间
+            source_size = os.path.getsize(file_path)
+            free_space = shutil.disk_usage(directory).free
+            if free_space < source_size:
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["insufficient_disk_space"])
+                    self.files_tree.item(item, tags=('failed',))
+                    self.unrenamed_files += 1
+                return False, None
+                
+            # 检查目标文件是否存在
             if os.path.exists(new_file_path):
                 if os.path.samefile(file_path, new_file_path):
                     with self.lock:
@@ -2653,23 +2360,24 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     self.files_tree.item(item, tags=('failed',))
                     self.unrenamed_files += 1
                 return False, None
-            try:
-                os.rename(file_path, new_file_path)
-            except PermissionError:
+                
+            # 执行重命名
+            if self.safe_rename_file(file_path, new_file_path):
+                # 更新缓存
+                self.update_caches_on_rename(file_path, new_file_path)
                 with self.lock:
-                    error_msg = "无权限重命名文件"
-                    self.files_tree.set(item, 'status', f'错误: {error_msg}')
+                    self.files_tree.set(item, 'filename', new_file_path)
+                    self.files_tree.set(item, 'renamed_name', new_name)
+                    self.files_tree.set(item, 'status', '已重命名')
+                    self.files_tree.item(item, tags=('renamed',))
+                return True, new_file_path
+            else:
+                with self.lock:
+                    self.files_tree.set(item, 'status', self.lang["rename_failed"])
                     self.files_tree.item(item, tags=('failed',))
                     self.unrenamed_files += 1
                 return False, None
-            with self.lock:
-                # 更新文件路径列
-                self.files_tree.set(item, 'filename', new_file_path)
-                # 更新新名称列
-                self.files_tree.set(item, 'renamed_name', new_name)
-                self.files_tree.set(item, 'status', '已重命名')
-                self.files_tree.item(item, tags=('renamed',))
-            return True, new_file_path
+                
         except Exception as e:
             logging.error(f"重命名失败: {str(e)}")
             with self.lock:
@@ -2677,48 +2385,35 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 self.files_tree.item(item, tags=('failed',))
                 self.unrenamed_files += 1
             return False, None
-
     def cache_file_info(self, file_path):
         """缓存文件信息"""
         try:
-            # 规范化文件路径
             file_path = os.path.normpath(file_path)
-            
-            # 检查文件是否存在
             if not os.path.exists(file_path):
                 return None
-            
-            # 获取文件信息
             info = {}
             try:
                 stat = os.stat(file_path)
-                
-                # 获取修改日期
                 try:
                     mtime = stat.st_mtime
                     info['modification_date'] = datetime.datetime.fromtimestamp(mtime)
                 except (AttributeError, OSError) as e:
                     logging.error(f"获取文件修改时间失败: {file_path}, 错误: {e}")
                     info['modification_date'] = None
-                
-                # 获取创建日期
                 try:
-                    if hasattr(stat, 'st_birthtime'):  # macOS
+                    if hasattr(stat, 'st_birthtime'):  
                         birth_time = stat.st_birthtime
-                    elif hasattr(stat, 'st_ctime'):    # Windows
+                    elif hasattr(stat, 'st_ctime'):    
                         birth_time = stat.st_ctime
-                    else:                              # Linux
+                    else:                              
                         birth_time = stat.st_ctime
                     info['creation_date'] = datetime.datetime.fromtimestamp(birth_time)
                 except (AttributeError, OSError) as e:
                     logging.error(f"获取文件创建时间失败: {file_path}, 错误: {e}")
                     info['creation_date'] = None
-                
             except (OSError, AttributeError) as e:
                 logging.error(f"获取文件状态失败: {file_path}, 错误: {e}")
                 return None
-            
-            # 获取EXIF数据（如果是图片文件）
             ext = os.path.splitext(file_path)[1].lower()
             if ext in SUPPORTED_IMAGE_FORMATS:
                 if ext == '.heic':
@@ -2727,16 +2422,12 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     info['exif_data'] = self.get_exif_data(file_path)
             elif ext in ['.mov', '.mp4', '.avi', '.mkv']:
                 info['video_date'] = self.get_video_creation_date(file_path)
-            
-            # 更新缓存
             if hasattr(self, 'file_info_cache'):
                 self.file_info_cache.set(file_path, info)
-            
             return info
         except Exception as e:
             logging.error(f"缓存文件信息失败: {file_path}, 错误: {e}")
             return None
-
     def start_update_thread(self):
         """启动更新线程"""
         if self.update_thread is None or not self.update_thread.is_alive():
@@ -2744,13 +2435,11 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
             self.update_thread = threading.Thread(target=self._process_updates)
             self.update_thread.daemon = True
             self.update_thread.start()
-
     def stop_update_thread(self):
         """停止更新线程"""
         self.stop_update_event.set()
         if self.update_thread and self.update_thread.is_alive():
             self.update_thread.join()
-
     def _process_updates(self):
         """处理更新队列中的任务"""
         while not self.stop_update_event.is_set():
@@ -2758,7 +2447,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 task = self.update_queue.get(timeout=0.1)
                 if task is None:
                     continue
-                
                 file_path, date_basis, alternate = task
                 self._update_single_file(file_path, date_basis, alternate)
                 self.update_queue.task_done()
@@ -2766,18 +2454,14 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 continue
             except Exception as e:
                 logging.error(f"处理更新任务失败: {e}")
-
     def _update_single_file(self, file_path, date_basis, alternate):
         """更新单个文件的新名称"""
         try:
             info = self.file_info_cache.get(file_path)
             if not info:
                 info = self.cache_file_info(file_path)
-            
             if not info:
                 return
-            
-            # 根据日期基准获取日期
             date_obj = None
             if date_basis == "拍摄日期":
                 if info['exif_data'] and 'DateTimeOriginalParsed' in info['exif_data']:
@@ -2788,7 +2472,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 date_obj = info['modification_date']
             elif date_basis == "创建日期":
                 date_obj = info['creation_date']
-            
             if date_obj:
                 exif_data = {'DateTimeOriginalParsed': date_obj}
                 new_name = self.generate_new_name(file_path, exif_data)
@@ -2796,7 +2479,6 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                     self.root.after(0, lambda: self._update_ui(file_path, new_name))
         except Exception as e:
             logging.error(f"更新文件新名称失败: {file_path}, 错误: {e}")
-
     def _update_ui(self, file_path, new_name):
         """更新UI显示"""
         for item in self.files_tree.get_children():
@@ -2804,111 +2486,71 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 self.files_tree.set(item, 'renamed_name', new_name)
                 self.files_tree.update_idletasks()
                 break
-
     def on_closing(self):
         """程序关闭时的清理工作"""
         try:
-            # 停止所有操作
             self.stop_all_operations()
-            
-            # 清理缓存
             try:
                 self.cleanup_cache()
             except Exception as e:
                 logging.error(f"清理缓存失败: {e}")
-            
-            # 关闭所有子窗口
             for window in self.toplevel_windows:
                 try:
                     window.destroy()
                 except:
                     pass
-            
-            # 销毁主窗口
             self.root.destroy()
-            
         except Exception as e:
             logging.error(f"关闭程序时出错: {e}")
             self.root.destroy()
-
     def get_cached_or_real_modification_date(self, file_path):
         """获取文件的修改日期，优先使用缓存"""
         try:
-            # 规范化文件路径
-            file_path = os.path.normpath(file_path)
-            
-            # 检查缓存
-            if hasattr(self, 'file_info_cache'):
-                info = self.file_info_cache.get(file_path)
-                if info and 'modification_date' in info and info['modification_date']:
-                    return info['modification_date']
-            
-            # 如果缓存中没有或缓存为空，获取实际日期
-            if os.path.exists(file_path):
-                stat = os.stat(file_path)
-                try:
-                    # 尝试获取修改时间
-                    mtime = stat.st_mtime
-                    date_obj = datetime.datetime.fromtimestamp(mtime)
-                    
-                    # 更新缓存
-                    if hasattr(self, 'file_info_cache'):
-                        if not info:
-                            info = {}
-                        info['modification_date'] = date_obj
-                        self.file_info_cache.set(file_path, info)
-                    
-                    return date_obj
-                except (AttributeError, OSError) as e:
-                    logging.error(f"获取文件修改时间失败: {file_path}, 错误: {e}")
-            
-            return None
+            file_path = os.path.abspath(os.path.normpath(file_path))
+            if not os.path.exists(file_path):
+                logging.error(f"文件不存在: {file_path}")
+                return None
+            if not os.access(file_path, os.R_OK):
+                logging.error(f"无法访问文件: {file_path}，权限不足")
+                return None
+            modification_time = os.path.getmtime(file_path)
+            date_obj = datetime.datetime.fromtimestamp(modification_time)
+            date_obj = date_obj.replace(microsecond=0)
+            logging.info(f"文件 {file_path} 的修改时间: {date_obj}")
+            return date_obj
         except Exception as e:
             logging.error(f"获取文件修改日期失败: {file_path}, 错误: {e}")
             return None
-
     def get_cached_or_real_creation_date(self, file_path):
         """获取文件的创建日期，优先使用缓存"""
         try:
-            # 规范化文件路径
             file_path = os.path.normpath(file_path)
-            
-            # 检查缓存
             if hasattr(self, 'file_info_cache'):
                 info = self.file_info_cache.get(file_path)
                 if info and 'creation_date' in info and info['creation_date']:
                     return info['creation_date']
-            
-            # 如果缓存中没有或缓存为空，获取实际日期
             if os.path.exists(file_path):
                 stat = os.stat(file_path)
                 try:
-                    # 尝试获取创建时间
-                    if hasattr(stat, 'st_birthtime'):  # macOS
+                    if hasattr(stat, 'st_birthtime'):  
                         birth_time = stat.st_birthtime
-                    elif hasattr(stat, 'st_ctime'):    # Windows
+                    elif hasattr(stat, 'st_ctime'):    
                         birth_time = stat.st_ctime
-                    else:                              # Linux
+                    else:                              
                         birth_time = stat.st_ctime
-                    
                     date_obj = datetime.datetime.fromtimestamp(birth_time)
-                    
-                    # 更新缓存
                     if hasattr(self, 'file_info_cache'):
                         if not info:
                             info = {}
                         info['creation_date'] = date_obj
                         self.file_info_cache.set(file_path, info)
-                    
                     return date_obj
                 except (AttributeError, OSError) as e:
                     logging.error(f"获取文件创建时间失败: {file_path}, 错误: {e}")
-            
             return None
         except Exception as e:
             logging.error(f"获取文件创建日期失败: {file_path}, 错误: {e}")
             return None
-
     def generate_new_name(self, file_path, exif_data, add_suffix=True):
         try:
             file_path = os.path.abspath(os.path.normpath(file_path))
@@ -2958,50 +2600,62 @@ GitHub：https://github.com/Qwejay/QphotoRenamer
                 if not date_obj:
                     return os.path.basename(file_path)
             if date_obj:
-                template = template.replace("{date}", date_obj.strftime("%Y%m%d"))
-                template = template.replace("{time}", date_obj.strftime("%H%M%S"))
+                # 使用字典来存储所有可能的变量值
+                variables = {
+                    "{date}": date_obj.strftime("%Y%m%d"),
+                    "{time}": date_obj.strftime("%H%M%S"),
+                    "{original}": os.path.splitext(os.path.basename(file_path))[0]
+                }
+                
+                # 添加 EXIF 数据变量
                 if exif_data:
                     if 'Model' in exif_data:
-                        template = template.replace("{camera}", exif_data['Model'])
+                        variables["{camera}"] = exif_data['Model']
                     if 'LensModel' in exif_data:
-                        template = template.replace("{lens}", exif_data['LensModel'])
+                        variables["{lens}"] = exif_data['LensModel']
                     if 'ISOSpeedRatings' in exif_data:
-                        template = template.replace("{iso}", exif_data['ISOSpeedRatings'])
+                        variables["{iso}"] = exif_data['ISOSpeedRatings']
                     if 'FNumber' in exif_data:
-                        template = template.replace("{aperture}", f"f{exif_data['FNumber']}")
+                        variables["{aperture}"] = f"f{exif_data['FNumber']}"
                     if 'ExposureTime' in exif_data:
-                        template = template.replace("{shutter}", exif_data['ExposureTime'])
-                    if 'ImageWidth' in exif_data and 'ImageHeight' in exif_data:
-                        template = template.replace("{width}", exif_data['ImageWidth'])
-                        template = template.replace("{height}", exif_data['ImageHeight'])
-                template = template.replace("{original}", os.path.splitext(os.path.basename(file_path))[0])
+                        variables["{shutter}"] = exif_data['ExposureTime']
+                    if 'ImageWidth' in exif_data:
+                        variables["{width}"] = exif_data['ImageWidth']
+                    if 'ImageHeight' in exif_data:
+                        variables["{height}"] = exif_data['ImageHeight']
+                
+                # 按变量长度降序排序，避免部分替换问题
+                sorted_vars = sorted(variables.keys(), key=len, reverse=True)
+                
+                # 替换所有变量
+                new_name = template
+                for var in sorted_vars:
+                    new_name = new_name.replace(var, variables[var])
+                
                 if add_suffix:
                     suffix_style = self.suffix_option_var.get()
-                    base_name = template
+                    base_name = new_name
                     new_name = self.generate_unique_filename(directory, base_name, ext, suffix_style)
                 else:
-                    new_name = template + ext
+                    new_name = new_name + ext
                 return new_name
             else:
                 return os.path.basename(file_path)
         except Exception as e:
             logging.error(f"生成新名称失败: {file_path}, 错误: {e}")
             return os.path.basename(file_path)
-
 class TemplateEditor(ttk.Frame):
     def __init__(self, parent, template_var, prefix_var=None, suffix_var=None, lang=None, main_app=None, **kwargs):
         super().__init__(parent, **kwargs)
-        self.template_var = template_var  # 使用主程序传入的 template_var
+        self.template_var = template_var  
         self.prefix_var = prefix_var
         self.suffix_var = suffix_var
-        self.lang = lang or LANGUAGES["简体中文"]  # 默认使用简体中文
+        self.lang = lang or LANGUAGES["简体中文"]  
         self.config = configparser.ConfigParser()
         self.config_file = 'QphotoRenamer.ini'
         self.main_app = main_app
-        self.is_modified = False  # 标记是否有未保存的修改
-        self.last_saved_content = ""  # 记录上次保存的内容，用于判断是否真正修改
-        
-        # 初始化变量列表
+        self.is_modified = False  
+        self.last_saved_content = ""  
         self.variables = [
             ("{date}", "日期"),
             ("{time}", "时间"),
@@ -3012,8 +2666,6 @@ class TemplateEditor(ttk.Frame):
             ("{aperture}", "光圈"),
             ("{shutter}", "快门")
         ]
-        
-        # 初始化模板列表
         self.templates = [
             "{date}_{time}",
             "{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}",
@@ -3022,14 +2674,8 @@ class TemplateEditor(ttk.Frame):
             "{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}"
         ]
         self.default_template = None
-        
-        # 设置UI
         self.setup_ui()
-        
-        # 加载模板
         self.load_templates()
-        
-        # 设置默认模板
         if self.default_template:
             self.set_template(self.default_template)
             self.template_combobox.set(self.default_template)
@@ -3037,125 +2683,78 @@ class TemplateEditor(ttk.Frame):
             self.set_template(self.template_var.get())
             self.template_combobox.set(self.template_var.get())
         else:
-            # 如果没有默认模板，使用第一个预设模板
             self.set_template(self.templates[0])
             self.template_combobox.set(self.templates[0])
-            
-        # 初始化完成后立即更新预览
         self.update_preview()
-
     def setup_ui(self):
         """设置UI界面"""
-        # 创建上下分栏
         top_frame = ttk.Frame(self)
         top_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
         middle_frame = ttk.Frame(self)
         middle_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
         bottom_frame = ttk.Frame(self)
         bottom_frame.pack(side=ttk.TOP, fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 上部分：预设模板和模板编辑
-        # 预设模板区域
         preset_frame = ttk.LabelFrame(top_frame, text="选择模板")
         preset_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 创建预设模板的顶部框架
         preset_top_frame = ttk.Frame(preset_frame)
         preset_top_frame.pack(fill=ttk.X, padx=5, pady=5)
-        
-        # 创建下拉框，增加宽度
         self.template_combobox = ttk.Combobox(preset_top_frame, values=self.templates, state="readonly", width=50)
         self.template_combobox.pack(side=ttk.LEFT, padx=5, pady=5, fill=ttk.X, expand=True)
         self.template_combobox.bind('<<ComboboxSelected>>', self.on_template_selected)
-        
-        # 创建按钮容器框架，用于右对齐按钮
         button_frame = ttk.Frame(preset_top_frame)
         button_frame.pack(side=ttk.RIGHT, padx=5)
-        
-        # 添加保存和删除按钮，放在右侧
         save_button = ttk.Button(button_frame, text=self.lang["save_template"], command=self.save_current_template, width=8)
         save_button.pack(side=ttk.LEFT, padx=2)
         save_button.text_key = "save_template"
-        
         delete_button = ttk.Button(button_frame, text=self.lang["delete_template"], command=self.delete_current_template, width=8)
         delete_button.pack(side=ttk.LEFT, padx=2)
         delete_button.text_key = "delete_template"
-        
-        # 模板编辑区域
         edit_frame = ttk.LabelFrame(top_frame, text="编辑模板")
         edit_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 模板文本框
         self.template_text = tk.Text(edit_frame, height=3, wrap=tk.WORD)
         self.template_text.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 绑定所有可能改变文本的事件
         def on_text_change(event=None):
             template = self.template_text.get("1.0", END).strip()
-            self.template_var.set(template)  # 直接更新主程序的模板变量
-            self.update_preview()  # 立即更新预览
+            self.template_var.set(template)  
+            self.update_preview()  
             return True
-            
         self.template_text.bind('<KeyRelease>', on_text_change)
         self.template_text.bind('<KeyPress>', on_text_change)
         self.template_text.bind('<<Paste>>', on_text_change)
         self.template_text.bind('<<Cut>>', on_text_change)
         self.template_text.bind('<Delete>', on_text_change)
         self.template_text.bind('<BackSpace>', on_text_change)
-        
-        # 中部分：变量按钮
         variables_frame = ttk.LabelFrame(middle_frame, text="变量")
         variables_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
         self.create_variable_buttons(variables_frame, self.variables)
-        
-        # 下部分：预览区域
         preview_frame = ttk.LabelFrame(bottom_frame, text="预览")
         preview_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 使用Label替代Text控件来显示预览
         self.preview_label = ttk.Label(preview_frame, text="", anchor='w', wraplength=0)
         self.preview_label.pack(fill=ttk.X, padx=5, pady=5)
-        
-        # 找到父窗口并绑定关闭事件
         parent = self.winfo_toplevel()
         original_close_handler = getattr(parent, 'protocol', lambda *args: None)('WM_DELETE_WINDOW')
-        
         def on_parent_close():
             """父窗口关闭时检查是否有未保存的修改"""
             if self.has_unsaved_changes():
                 if messagebox.askyesno("未保存的修改", "模板编辑器中有未保存的修改，是否保存？"):
                     self.save_current_template()
-            
-            # 调用原始的关闭处理函数
             if callable(original_close_handler):
                 original_close_handler()
             else:
                 parent.destroy()
-                
         parent.protocol("WM_DELETE_WINDOW", on_parent_close)
-
     def update_preview(self, event=None):
         """更新预览"""
         template = self.template_text.get("1.0", END).strip()
-        
-        # 只有当内容真正变化时才标记为已修改
         if template != self.last_saved_content:
             self.is_modified = True
-            
-            # 检查当前模板是否为新模板（与所有已有模板都不同）
             is_new_template = template not in self.templates
-            
-            # 如果是新模板，更新下拉框提示用户
             if is_new_template and template:
                 current_values = list(self.template_combobox['values'])
                 if "(新模板)" not in current_values:
                     new_values = current_values + ["(新模板)"]
                     self.template_combobox['values'] = new_values
                     self.template_combobox.set("(新模板)")
-        
-        # 创建预览文本
         preview = template
         preview = preview.replace("{date}", "20240315")
         preview = preview.replace("{time}", "143022")
@@ -3169,138 +2768,93 @@ class TemplateEditor(ttk.Frame):
         preview = preview.replace("{height}", "5464")
         preview = preview.replace("{original}", "IMG_1234")
         preview = preview.replace("{counter}", "001")
-        
-        # 更新预览标签
         self.preview_label.config(text=preview)
-        
-        # 如果有主程序实例，更新文件列表中的预览
         if self.main_app and hasattr(self.main_app, 'update_renamed_name_column'):
             self.main_app.update_renamed_name_column()
-            
-        # 返回 True 以允许事件继续传播
         return True
-
     def clear_template(self):
         """清除模板内容"""
         self.template_text.delete("1.0", END)
-        # 清除后内容与保存的内容不同，标记为已修改
         self.update_preview()
-        # 强制设置为已修改，因为清空是明确的修改操作
         self.is_modified = True
-        
     def on_drop(self, event):
         """处理拖放事件"""
         current_content = self.template_text.get("1.0", END).strip()
         self.template_text.insert(INSERT, event.data)
-        # 拖放后检查内容是否有变化
         self.update_preview()
-        # 明确标记为已修改，因为拖放是明确的修改操作
         self.is_modified = True
-        
     def create_variable_buttons(self, parent, variables):
         """创建变量按钮"""
         frame = ttk.Frame(parent)
         frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
-        
-        # 使用网格布局，每行4个按钮
         for i, (var, desc) in enumerate(variables):
             row = i // 4
             col = i % 4
-            
-            # 创建按钮容器
             btn_frame = ttk.Frame(frame)
             btn_frame.grid(row=row, column=col, sticky="ew", padx=2, pady=2)
-            
-            # 创建按钮
             btn = ttk.Button(btn_frame, text=desc, width=8,
                            command=lambda v=var: self.insert_variable(v))
             btn.pack(side=ttk.LEFT, padx=2)
-            
-            # 显示变量名称的标签
             lbl = ttk.Label(btn_frame, text=var, foreground="gray", width=8)
             lbl.pack(side=ttk.LEFT, padx=2)
-            
-        # 使按钮水平方向填充
         for i in range(4):
             frame.columnconfigure(i, weight=1)
-
     def has_unsaved_changes(self):
         """检查是否有未保存的修改"""
         current_content = self.template_text.get("1.0", tk.END).strip()
         return current_content != self.last_saved_content
-        
     def delete_current_template(self):
         """删除当前选中的模板"""
-        # 检查是否有未保存的修改
         if self.has_unsaved_changes():
             if messagebox.askyesno("未保存的修改", "当前模板有未保存的修改，是否保存？"):
                 self.save_current_template()
-                
         current_template = self.template_combobox.get()
         if current_template in self.templates:
-            # 从列表中移除当前模板
             self.templates.remove(current_template)
-            # 确保从配置文件中也移除
             try:
                 if os.path.exists(self.config_file):
                     self.config.read(self.config_file, encoding='utf-8')
                     if 'Template' in self.config:
-                        # 遍历所有模板项，找到并删除匹配的值
                         for key in list(self.config['Template']):
                             if key.startswith('template') and self.config['Template'][key] == current_template:
                                 del self.config['Template'][key]
-                        # 写入配置文件
                         with open(self.config_file, 'w', encoding='utf-8') as f:
                             self.config.write(f)
             except Exception as e:
                 logging.error(f"从配置文件删除模板失败: {e}")
-            
-            # 刷新下拉框
             self.update_template_combobox()
-            
-            # 如果还有其他模板，选择第一个
             if self.templates:
                 self.template_combobox.set(self.templates[0])
                 self.set_template(self.templates[0])
             else:
-                # 如果没有模板了，清空文本框和下拉框
                 self.clear_template()
                 self.template_combobox['values'] = []
                 self.template_combobox.set("")
-            
-            # 通知用户
             self.update_status_bar(f"已删除模板: {current_template}")
-            
     def load_templates(self):
         """从配置文件加载模板"""
         try:
-            # 尝试从配置文件加载模板
             if os.path.exists(self.config_file):
                 self.config.read(self.config_file, encoding='utf-8')
-                
-                # 加载默认模板
                 if self.config.has_option('Template', 'default_template'):
                     self.default_template = self.config.get('Template', 'default_template')
-                    self.last_saved_content = self.default_template  # 更新保存的内容
-                
-                # 加载模板列表
+                    self.last_saved_content = self.default_template
                 if self.config.has_section('Template'):
                     templates = []
+                    # 首先添加默认模板
+                    if self.default_template and self.default_template not in templates:
+                        templates.append(self.default_template)
+                    # 然后添加其他模板
                     for i in range(1, 6):
                         template_key = f'template{i}'
                         if self.config.has_option('Template', template_key):
                             template = self.config.get('Template', template_key)
-                            if template not in templates:
+                            if template and template not in templates:
                                 templates.append(template)
-                    
-                    # 如果找到了保存的模板，使用它们
                     if templates:
                         self.templates = templates
-                        
         except Exception as e:
             logging.error(f"加载模板失败: {e}")
-        
-        # 如果没有找到模板，使用默认模板
         if not self.templates:
             self.templates = [
                 "{date}_{time}",
@@ -3309,106 +2863,68 @@ class TemplateEditor(ttk.Frame):
                 "{camera}_{lens}_{iso}_{focal}_{aperture}",
                 "{date}_{time}_{camera}_{lens}_{iso}_{focal}_{aperture}_{shutter}"
             ]
-            
-        # 更新下拉框的值
         self.update_template_combobox()
-        
     def save_templates(self):
         """保存模板记录到配置文件"""
         try:
-            # 读取现有配置
             if os.path.exists(self.config_file):
                 self.config.read(self.config_file, encoding='utf-8')
-            
-            # 确保 Template 部分存在
             if 'Template' not in self.config:
                 self.config['Template'] = {}
-            
-            # 获取当前模板内容
             current_template = self.template_text.get("1.0", END).strip()
             if not current_template:
                 self.update_status_bar("模板内容不能为空")
                 return
-            
-            # 保存当前模板为默认模板
+            # 保存为默认模板
             self.config['Template']['default_template'] = current_template
             self.default_template = current_template
             
-            # 保存模板列表
-            # 首先清除所有现有的模板
-            for key in list(self.config['Template'].keys()):
-                if key.startswith('template'):
-                    del self.config['Template'][key]
-            
-            # 确保当前模板在列表中
+            # 更新模板列表
             if current_template not in self.templates:
                 self.templates.append(current_template)
             
             # 保存所有模板
             for i, template in enumerate(self.templates, 1):
-                if template and template != "(新模板)":  # 只保存有效的模板
+                if template and template != "(新模板)":
                     self.config['Template'][f'template{i}'] = template
             
-            # 写入配置文件
+            # 保存到文件
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 self.config.write(f)
             
-            # 同时更新主程序的模板变量
             if self.template_var:
                 self.template_var.set(current_template)
-            
-            # 更新下拉框
             self.update_template_combobox()
             self.template_combobox.set(current_template)
-            
             self.update_status_bar("模板已保存")
-            
         except Exception as e:
             logging.error(f"保存模板记录时出错: {e}")
             self.update_status_bar(f"保存模板失败: {str(e)}")
-
     def save_current_template(self):
         """保存当前模板"""
         try:
-            # 获取当前模板内容
             template = self.template_text.get("1.0", tk.END).strip()
             if not template:
                 self.update_status_bar("模板内容不能为空")
                 return
-            
-            # 检查当前模板是否为新模板
             is_new_template = template not in self.templates
-            
-            # 如果模板不在列表中，添加到列表
             if is_new_template:
                 self.templates.append(template)
                 self.update_status_bar("新模板已创建并保存")
             else:
                 self.update_status_bar("模板已更新")
-            
-            # 设置为当前模板
             self.default_template = template
-            
-            # 保存到文件
             self.save_templates()
-            
-            # 更新下拉框
             self.update_template_combobox()
             self.template_combobox.set(template)
-            
-            # 重置修改标志并更新保存的内容
             self.is_modified = False
             self.last_saved_content = template
-            
-            # 如果有主程序实例，更新文件列表中的预览
             if self.main_app and hasattr(self.main_app, 'update_renamed_name_column'):
                 self.main_app.update_renamed_name_column()
-            
         except Exception as e:
             error_msg = f"保存模板失败: {str(e)}"
             logging.error(error_msg)
             self.update_status_bar(error_msg)
-    
     def update_status_bar(self, message):
         """更新状态栏消息"""
         try:
@@ -3418,109 +2934,65 @@ class TemplateEditor(ttk.Frame):
                 logging.info(message)
         except Exception as e:
             logging.error(f"更新状态栏失败: {str(e)}")
-            logging.info(message)  # 至少记录到日志
-            
+            logging.info(message)  
     def on_template_selected(self, event=None):
         """当选择模板时更新编辑器内容"""
         try:
             selected_template = self.template_combobox.get()
             current_template = self.template_text.get("1.0", tk.END).strip()
-            
-            # 如果选择的不是当前正在编辑的模板
             if selected_template != "(新模板)" and selected_template != current_template:
-                # 检查是否有未保存的修改
                 if self.is_modified:
                     if messagebox.askyesno("未保存的修改", "当前模板有未保存的修改，是否保存？"):
-                        # 如果当前是新模板且用户希望保存
                         if "(新模板)" in self.template_combobox['values'] and self.template_combobox.get() == "(新模板)":
-                            # 保存新模板内容
                             if current_template and current_template not in self.templates:
                                 self.templates.append(current_template)
-                                # 通知用户新模板已保存
                                 self.update_status_bar("新模板已保存")
                         self.save_current_template()
-                
-                # 现在获取并显示选择的模板
                 if selected_template in self.templates:
                     self.template_text.delete("1.0", tk.END)
                     self.template_text.insert("1.0", selected_template)
-                    
-                    # 更新默认模板
                     self.default_template = selected_template
-                    
-                    # 保存到配置文件
                     self.save_templates()
-                    
-                    # 更新状态
                     self.update_status_bar(f"已加载模板: {selected_template}")
-                    
-                    # 重置修改标志并更新保存的内容
                     self.is_modified = False
                     self.last_saved_content = selected_template
-                    
-                    # 更新主程序的模板变量
                     if self.template_var:
                         self.template_var.set(selected_template)
-                    
-                    # 更新主程序的文件列表预览
                     if self.main_app and hasattr(self.main_app, 'update_renamed_name_column'):
                         self.main_app.update_renamed_name_column()
-                
         except Exception as e:
             error_msg = f"加载模板失败: {str(e)}"
             logging.error(error_msg)
             self.update_status_bar(error_msg)
-            
     def update_template_combobox(self):
         """更新下拉框的选项"""
-        # 获取当前编辑器中的内容
         current_content = self.template_text.get("1.0", tk.END).strip()
-        
-        # 确保self.templates不包含重复项
         unique_templates = []
         for t in self.templates:
             if t != "(新模板)" and t not in unique_templates:
                 unique_templates.append(t)
         self.templates = unique_templates
-        
-        # 创建下拉框值列表
         values = self.templates.copy()
-        
-        # 确保当前编辑的模板内容在值列表中（如果不是空的且与已保存内容不同）
         if current_content and current_content not in values and current_content != self.last_saved_content:
-            # 将当前内容视为一个潜在的新模板
             values.append("(新模板)")
-            
-        # 更新下拉框
         self.template_combobox['values'] = values
-        
     def set_template(self, template):
         """设置模板内容"""
         self.template_text.delete("1.0", END)
         self.template_text.insert("1.0", template)
-        self.last_saved_content = template  # 更新保存的内容
-        self.is_modified = False  # 重置修改标志
-        
-        # 更新主程序的模板变量
+        self.last_saved_content = template  
+        self.is_modified = False  
         if self.template_var:
             self.template_var.set(template)
-            
-        # 立即更新预览
         self.update_preview()
-        
-        # 更新主程序的文件列表预览
         if self.main_app and hasattr(self.main_app, 'update_renamed_name_column'):
             self.main_app.update_renamed_name_column()
-
     def insert_variable(self, variable):
         """插入变量到模板"""
         current_content = self.template_text.get("1.0", END).strip()
         self.template_text.insert(INSERT, variable)
-        # 更新 template_var 以触发预览更新
         self.template_var.set(self.template_text.get("1.0", END).strip())
-        # 明确标记为已修改，因为插入变量是明确的修改操作
         self.is_modified = True
-        
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
     try:
