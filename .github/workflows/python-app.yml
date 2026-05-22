@@ -31,15 +31,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install nuitka ordered-set pillow-heif piexif exifread ttkbootstrap tkinterdnd2
 
-      # 4. 下载并解压 tkdnd（用于拖放功能）
+      # 4. 下载并解压 tkdnd
       - name: Download and extract tkdnd
         run: |
           curl -L -o tkdnd.zip https://github.com/petasis/tkdnd/releases/download/tkdnd-release-test-v2.9.4-rc3/tkdnd-2.9.4-windows-x64.zip
           mkdir -p tkdnd
           tar -xf tkdnd.zip -C tkdnd
 
-      # 5. 使用 Nuitka 打包应用（已自动确认下载）
+      # 5. 使用 Nuitka 打包（关键修复：使用 cmd shell + ^ 换行）
       - name: Build with Nuitka
+        shell: cmd
         run: |
           python -m nuitka ^
             --standalone ^
