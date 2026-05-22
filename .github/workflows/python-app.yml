@@ -29,8 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
+          pip install nuitka ordered-set pillow-heif piexif exifread ttkbootstrap tkinterdnd2
 
       # 4. 下载并解压 tkdnd（用于拖放功能）
       - name: Download and extract tkdnd
@@ -39,10 +38,28 @@ jobs:
           mkdir -p tkdnd
           tar -xf tkdnd.zip -C tkdnd
 
-      # 5. 使用 PyInstaller 打包应用
-      - name: Build with PyInstaller
+      # 5. 使用 Nuitka 打包应用（已自动确认下载）
+      - name: Build with Nuitka
         run: |
-          pyinstaller --onefile --windowed --icon=icon.ico --add-data "QphotoRenamer.ini;." --add-data "icon.ico;." --add-data "tkdnd/*;tkdnd" QphotoRenamer.py
+          python -m nuitka ^
+            --standalone ^
+            --onefile ^
+            --windows-disable-console ^
+            --enable-plugin=tk-inter ^
+            --include-module=ttkbootstrap ^
+            --include-package=pillow_heif ^
+            --include-package=piexif ^
+            --include-package=exifread ^
+            --include-package=tkinterdnd2 ^
+            --windows-icon-from-ico=icon.ico ^
+            --product-name="QphotoRenamer" ^
+            --product-version=2.4.0 ^
+            --file-description="文件与照片批量重命名工具" ^
+            --copyright="QwejayHuang" ^
+            --output-dir=dist ^
+            --clean-cache=all ^
+            --assume-yes-for-downloads ^
+            QphotoRenamer.py
 
       # 6. 上传构建产物作为 Artifact
       - name: Upload artifact
@@ -51,7 +68,7 @@ jobs:
           name: QphotoRenamer-build
           path: dist/QphotoRenamer.exe
 
-      # 7. 获取最新 Release 版本号（修改后的 0.1 递增逻辑）
+      # 7. 获取最新 Release 版本号
       - name: Get latest release version
         id: get_version
         uses: actions/github-script@v6
@@ -64,20 +81,18 @@ jobs:
             });
             let version;
             if (response.data.length === 0) {
-              version = '1.0'; // 初始版本改为 1.0
+              version = '1.0';
             } else {
               const latestTag = response.data[0].tag_name;
-              // 匹配格式：可选的 v 前缀 + 数字.数字（允许结尾有其他字符但主要取前两部分）
               const versionMatch = latestTag.match(/^v?(\d+)\.(\d+)/i);
               if (!versionMatch) {
                 version = '1.0';
               } else {
                 const major = parseInt(versionMatch[1], 10);
-                const minor = parseInt(versionMatch[2], 10) + 1; // 递增次要版本
+                const minor = parseInt(versionMatch[2], 10) + 1;
                 version = `${major}.${minor}`;
               }
             }
-            // 使用环境文件设置输出
             const fs = require('fs');
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
 
