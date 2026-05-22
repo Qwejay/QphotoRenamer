@@ -1,15 +1,15 @@
 name: Build and Package QphotoRenamer
 
 on:
-  # 1. 推荐方式：创建 Release 时自动触发（GitHub Desktop/Web 支持）
+  # 推荐方式：创建 Release 时自动打包并上传 exe
   release:
     types: [created]
 
-  # 2. 备选：手动触发
+  # 备选：手动触发测试
   workflow_dispatch:
     inputs:
       version:
-        description: ''
+        description: '版本号 (例如: 2.6)'
         required: true
         default: '2.6'
 
@@ -56,7 +56,7 @@ jobs:
             --include-package=tkinterdnd2 ^
             --windows-icon-from-ico=icon.ico ^
             --product-name="QphotoRenamer" ^
-            --product-version=${{ github.event.release.tag_name || inputs.version || '2.5.0' }} ^
+            --product-version=${{ github.event.release.tag_name || inputs.version || '2.5' }} ^
             --file-description="文件与照片批量重命名工具" ^
             --copyright="QwejayHuang" ^
             --output-dir=dist ^
@@ -70,7 +70,7 @@ jobs:
           name: QphotoRenamer-build
           path: dist/QphotoRenamer.exe
 
-      - name: Upload to Release
+      - name: Upload exe to Release
         if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
         env:
