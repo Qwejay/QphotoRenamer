@@ -64,19 +64,25 @@ jobs:
             --assume-yes-for-downloads ^
             QphotoRenamer.py
 
+      - name: Compress EXE to ZIP
+        shell: pwsh
+        run: |
+          $VERSION = "${{ github.event.release.tag_name || inputs.version || '2.5' }}"
+          Compress-Archive -Path "dist/QphotoRenamer.exe" -DestinationPath "dist/QphotoRenamer_$VERSION.zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QphotoRenamer-build
-          path: dist/QphotoRenamer.exe
+          name: QphotoRenamer_build
+          path: dist/QphotoRenamer_${{ github.event.release.tag_name || inputs.version || '2.5' }}.zip
 
-      - name: Upload exe to Release
+      - name: Upload ZIP to Release
         if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/QphotoRenamer.exe
-          asset_name: QphotoRenamer-${{ github.event.release.tag_name }}.exe
-          asset_content_type: application/octet-stream
+          asset_path: dist/QphotoRenamer_${{ github.event.release.tag_name }}.zip
+          asset_name: QphotoRenamer_${{ github.event.release.tag_name }}.zip
+          asset_content_type: application/zip
