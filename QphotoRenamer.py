@@ -28,7 +28,7 @@ SUPPORTED_IMAGE_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.heic'}
 SUPPORTED_VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v'}
 
 LANG = {
-    "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.4 —— QwejayHuang",
+    "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.6 —— QwejayHuang",
     "drag_hint": "拖入文件，优先使用",
     "rename_hint": "重命名，如无拍摄日期则使用",
     "rename_end_hint": "重命名。",
@@ -343,7 +343,10 @@ class PhotoRenamer:
                                 creation_time = int.from_bytes(f.read(4), byteorder='big') if version == 0 else int.from_bytes(f.read(8), byteorder='big')
                                 if 0 < creation_time < 20827584000:
                                     try:
-                                        dt = datetime.datetime(1904, 1, 1) + datetime.timedelta(seconds=creation_time)
+                                        # 1. QuickTime规范规定基准为 UTC 1904-01-01
+                                        utc_dt = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(seconds=creation_time)
+                                        # 2. 转换为系统本地时区（如东八区 +8h），并去除时区信息保持与EXIF一致
+                                        dt = utc_dt.astimezone().replace(tzinfo=None)
                                         if 1970 < dt.year < 2100: return dt
                                     except (OverflowError, ValueError): pass
                                 break
@@ -358,13 +361,18 @@ class PhotoRenamer:
             flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags)
             if result.returncode == 0 and result.stdout.strip():
-                date_str = result.stdout.strip()
-                date_str = date_str.replace('T', ' ').replace('Z', '')
+                raw_str = result.stdout.strip()
+                is_utc = raw_str.endswith('Z') or '+00:00' in raw_str
+                date_str = raw_str.replace('T', ' ').replace('Z', '')
                 if '.' in date_str:
                     date_str = date_str.split('.')[0]
                 for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
                     try:
-                        return datetime.datetime.strptime(date_str.strip(), fmt)
+                        dt = datetime.datetime.strptime(date_str.strip(), fmt)
+                        # 如果ffprobe返回的是UTC时间（带Z），同样转换为系统本地时区
+                        if is_utc:
+                            dt = dt.replace(tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
+                        return dt
                     except ValueError: continue
         except Exception: pass
         return None
@@ -541,7 +549,7 @@ class PhotoRenamer:
             about_frame = ttk.Labelframe(other_frame, text="关于")
             about_frame.pack(fill='both', expand=True, padx=10, pady=5)
             about_text = (
-                "QphotoRenamer 2.4\n\n"
+                "QphotoRenamer 2.6\n\n"
                 "是一个简单易用的文件与照片批量重命名工具，支持根据拍摄日期、修改日期或创建日期重命名文件。\n\n"
                 "❤拖放支持：直接拖拽极多文件或文件夹到程序界面不卡顿！\n"
                 "❤多格式支持：支持常规图片以及视频(mp4/mov等)媒体极速无损解析提取\n"
