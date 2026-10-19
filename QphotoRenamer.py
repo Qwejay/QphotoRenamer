@@ -28,7 +28,7 @@ SUPPORTED_IMAGE_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.heic'}
 SUPPORTED_VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v'}
 
 LANG = {
-    "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.6 —— QwejayHuang",
+    "window_title": "文件与照片批量重命名工具 QphotoRenamer 2.7 —— QwejayHuang",
     "drag_hint": "拖入文件，优先使用",
     "rename_hint": "重命名，如无拍摄日期则使用",
     "rename_end_hint": "重命名。",
@@ -283,7 +283,6 @@ class PhotoRenamer:
 
     def get_heic_data(self, file_path):
         try:
-            # 仅解析元数据，不解码图像像素，速度大幅度提升
             heif_file = pillow_heif.read_heif(file_path, decode_image=False)
             if 'exif' not in heif_file.info: return {}
 
@@ -343,10 +342,7 @@ class PhotoRenamer:
                                 creation_time = int.from_bytes(f.read(4), byteorder='big') if version == 0 else int.from_bytes(f.read(8), byteorder='big')
                                 if 0 < creation_time < 20827584000:
                                     try:
-                                        # 1. QuickTime规范规定基准为 UTC 1904-01-01
-                                        utc_dt = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(seconds=creation_time)
-                                        # 2. 转换为系统本地时区（如东八区 +8h），并去除时区信息保持与EXIF一致
-                                        dt = utc_dt.astimezone().replace(tzinfo=None)
+                                        dt = datetime.datetime(1904, 1, 1) + datetime.timedelta(seconds=creation_time)
                                         if 1970 < dt.year < 2100: return dt
                                     except (OverflowError, ValueError): pass
                                 break
@@ -362,17 +358,13 @@ class PhotoRenamer:
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags)
             if result.returncode == 0 and result.stdout.strip():
                 raw_str = result.stdout.strip()
-                is_utc = raw_str.endswith('Z') or '+00:00' in raw_str
                 date_str = raw_str.replace('T', ' ').replace('Z', '')
+                date_str = re.sub(r'([+-]\d{2}:?\d{2})$', '', date_str)
                 if '.' in date_str:
                     date_str = date_str.split('.')[0]
                 for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
                     try:
-                        dt = datetime.datetime.strptime(date_str.strip(), fmt)
-                        # 如果ffprobe返回的是UTC时间（带Z），同样转换为系统本地时区
-                        if is_utc:
-                            dt = dt.replace(tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
-                        return dt
+                        return datetime.datetime.strptime(date_str.strip(), fmt)
                     except ValueError: continue
         except Exception: pass
         return None
@@ -484,13 +476,11 @@ class PhotoRenamer:
             notebook = ttk.Notebook(settings_window)
             notebook.pack(fill='both', expand=True, padx=10, pady=10)
 
-            # 1. 格式设置
             template_frame = ttk.Frame(notebook)
             notebook.add(template_frame, text="重命名格式设置")
             self.template_editor = TemplateEditor(template_frame, self.template_var, main_app=self)
             self.template_editor.pack(fill='both', expand=True, padx=10, pady=10)
 
-            # 2. 日期设置
             date_frame = ttk.Frame(notebook)
             notebook.add(date_frame, text="日期设置")
             date_basis_frame = ttk.Labelframe(date_frame, text="日期基准")
@@ -506,7 +496,6 @@ class PhotoRenamer:
             ttk.Label(alternate_date_select_frame, text="备选日期:").pack(side='left')
             ttk.Combobox(alternate_date_select_frame, textvariable=self.alternate_date_var, values=[item['display'] for item in self.lang["alternate_dates"]], state="readonly").pack(side='left', fill='x', expand=True, padx=5)
 
-            # 3. 文件处理设置
             file_frame = ttk.Frame(notebook)
             notebook.add(file_frame, text="文件处理设置")
 
@@ -542,14 +531,13 @@ class PhotoRenamer:
             threshold_entry = ttk.Entry(threshold_frame, textvariable=self.fast_add_threshold_var, width=5, state="normal" if self.fast_add_mode_var.get() else "disabled")
             threshold_entry.pack(side='left', padx=5)
 
-            # 4. 关于
             other_frame = ttk.Frame(notebook)
             notebook.add(other_frame, text="关于")
 
             about_frame = ttk.Labelframe(other_frame, text="关于")
             about_frame.pack(fill='both', expand=True, padx=10, pady=5)
             about_text = (
-                "QphotoRenamer 2.6\n\n"
+                "QphotoRenamer \n\n"
                 "是一个简单易用的文件与照片批量重命名工具，支持根据拍摄日期、修改日期或创建日期重命名文件。\n\n"
                 "❤拖放支持：直接拖拽极多文件或文件夹到程序界面不卡顿！\n"
                 "❤多格式支持：支持常规图片以及视频(mp4/mov等)媒体极速无损解析提取\n"
@@ -749,7 +737,6 @@ class PhotoRenamer:
         self.stop_button.config(state='disabled')
 
     def update_renamed_name_column(self):
-        # 主线程一次性读取节点快照，完全避免线程冲突
         items_to_update = []
         for item in self.files_tree.get_children():
             values = self.files_tree.item(item)['values']
@@ -772,7 +759,6 @@ class PhotoRenamer:
         items = self.files_tree.get_children()
         if not items: return
 
-        # 同样在主线程准备好需要修改的数据快照
         items_data = []
         for item in items:
             vals = self.files_tree.item(item)['values']
@@ -822,7 +808,6 @@ class PhotoRenamer:
 
             os.rename(file_path, target)
             def on_success():
-                # 若勾选仅显示错误，将成功的条目直接在列表中删除
                 if self.show_errors_only_var.get():
                     self.files_tree.delete(item)
                 else:
